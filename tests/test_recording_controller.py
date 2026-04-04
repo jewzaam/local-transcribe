@@ -39,7 +39,7 @@ def mock_dependencies():
         patch(
             "local_transcribe_ui.recording_controller.ChunkManager",
             return_value=mock_chunk_mgr,
-        ),
+        ) as mock_chunk_cls,
         patch(
             "local_transcribe_ui.recording_controller.SilenceDetector",
         ),
@@ -60,6 +60,7 @@ def mock_dependencies():
             "preload": mock_preload,
             "session": mock_session,
             "chunk_manager": mock_chunk_mgr,
+            "chunk_manager_cls": mock_chunk_cls,
             "window": mock_window,
         }
 
@@ -107,6 +108,28 @@ class TestRecordingControllerStart:
 
         mock_dependencies["chunk_manager"].set_stream_callback.assert_called_once_with(
             on_chunk
+        )
+
+    def test_start_uses_engine_defaults_when_unset(
+        self, mock_tk_root, mock_dependencies
+    ):
+        controller = RecordingController(mock_tk_root)
+        controller.start()
+
+        # No kwargs passed — engine classes use their own defaults
+        mock_dependencies["chunk_manager_cls"].assert_called_once_with()
+
+    def test_start_passes_custom_compute_params(self, mock_tk_root, mock_dependencies):
+        controller = RecordingController(
+            mock_tk_root,
+            compute_device="cuda",
+            compute_type="float16",
+        )
+        controller.start()
+
+        mock_dependencies["chunk_manager_cls"].assert_called_once_with(
+            device="cuda",
+            compute_type="float16",
         )
 
 

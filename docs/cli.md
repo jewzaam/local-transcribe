@@ -23,9 +23,17 @@ local-transcribe record [options]
 |--------|-------------|
 | `--model MODEL` | Whisper model size: `tiny`, `base`, `small`, `medium`, `large` (default: `small`) |
 | `--device ID` | Audio input device ID (default: system default) |
+| `--compute-device DEVICE` | Inference device: `cpu`, `cuda`, `auto` (default: `cpu`) |
+| `--compute-type TYPE` | Model precision: `int8`, `float16`, `float32` (default: `int8`) |
+| `--silence-threshold LEVEL` | Audio level below which is silence, 0.0-1.0 (default: `0.08`) |
+| `--silence-duration SECONDS` | Seconds of silence before chunk flush (default: `1.0`) |
+| `--min-chunk-seconds SECONDS` | Minimum audio before silence flush triggers (default: `10.0`) |
 | `--stream` | Stream transcript chunks to stdout as they complete |
 | `--wav-output PATH` | Save recorded audio to a WAV file |
-| `--debug [LOGFILE]` | Enable debug logging. Optionally write to a file |
+| `--config PATH` | Load defaults from JSON config file (see [Configuration](config.md)) |
+| `--debug` | Enable debug logging |
+| `--quiet`, `-q` | Suppress non-essential output |
+| `--log-file PATH` | Write log output to file |
 
 **Output:** Transcript wrapped in `[BEGIN version=X.Y.Z]` / `[END]` markers on stdout. `[CANCEL]` if the user cancels.
 
@@ -38,8 +46,9 @@ local-transcribe record [options]
 
 ```bash
 local-transcribe record
-local-transcribe record --model tiny --stream
-local-transcribe record --wav-output ~/recording.wav --debug ~/debug.log
+local-transcribe record --config ~/.config/local-transcribe-config.json
+local-transcribe record --model large --compute-device cuda --compute-type float16
+local-transcribe record --debug --log-file ~/debug.log
 ```
 
 ### transcribe
@@ -54,7 +63,12 @@ local-transcribe transcribe <file> [options]
 |--------|-------------|
 | `file` | Path to WAV file (required) |
 | `--model MODEL` | Whisper model size (default: `small`) |
-| `--debug [LOGFILE]` | Enable debug logging |
+| `--compute-device DEVICE` | Inference device: `cpu`, `cuda`, `auto` (default: `cpu`) |
+| `--compute-type TYPE` | Model precision: `int8`, `float16`, `float32` (default: `int8`) |
+| `--config PATH` | Load defaults from JSON config file (see [Configuration](config.md)) |
+| `--debug` | Enable debug logging |
+| `--quiet`, `-q` | Suppress non-essential output |
+| `--log-file PATH` | Write log output to file |
 
 **Output:** Transcript wrapped in `[BEGIN]` / `[END]` markers on stdout.
 
@@ -62,7 +76,8 @@ local-transcribe transcribe <file> [options]
 
 ```bash
 local-transcribe transcribe meeting.wav
-local-transcribe transcribe meeting.wav --model large
+local-transcribe transcribe meeting.wav --model large --compute-device cuda --compute-type float16
+local-transcribe transcribe meeting.wav --config ~/.config/local-transcribe-config.json
 ```
 
 ### devices
@@ -75,7 +90,9 @@ local-transcribe devices [options]
 
 | Option | Description |
 |--------|-------------|
-| `--debug [LOGFILE]` | Enable debug logging |
+| `--debug` | Enable debug logging |
+| `--quiet`, `-q` | Suppress non-essential output |
+| `--log-file PATH` | Write log output to file |
 
 **Output:** Device ID and name, one per line.
 

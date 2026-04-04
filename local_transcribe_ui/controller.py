@@ -31,20 +31,32 @@ class AppController:
         device_id: Audio input device ID (None for default).
         stream_mode: Stream transcript chunks to stdout as they complete.
         wav_output: Optional path to save recorded audio.
+        compute_device: Inference device — "cpu", "cuda", or "auto".
+        compute_type: Model precision — "int8", "float16", "float32".
     """
 
     def __init__(
         self,
         *,
-        model_size: str = "small",
+        model_size: str,
         device_id: int | None = None,
         stream_mode: bool = False,
         wav_output: str | None = None,
+        compute_device: str,
+        compute_type: str,
+        silence_threshold: float,
+        silence_duration: float,
+        min_chunk_seconds: float,
     ):
         self._model_size = model_size
         self._device_id = device_id
         self._stream_mode = stream_mode
         self._wav_output = wav_output
+        self._compute_device = compute_device
+        self._compute_type = compute_type
+        self._silence_threshold = silence_threshold
+        self._silence_duration = silence_duration
+        self._min_chunk_seconds = min_chunk_seconds
 
         self._root: tk.Tk | None = None
         self._controller: RecordingController | None = None
@@ -77,6 +89,11 @@ class AppController:
             on_error=self._on_error,
             on_stream_chunk=self._on_stream_chunk if self._stream_mode else None,
             wav_output=self._wav_output,
+            compute_device=self._compute_device,
+            compute_type=self._compute_type,
+            silence_threshold=self._silence_threshold,
+            silence_duration=self._silence_duration,
+            min_chunk_seconds=self._min_chunk_seconds,
         )
 
         self._controller.start()

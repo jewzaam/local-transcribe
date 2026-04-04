@@ -48,8 +48,8 @@ class SilenceDetector:
         self,
         *,
         threshold: float = _DEFAULT_SILENCE_THRESHOLD,
-        duration_s: float = 2.0,
-        min_chunk_s: float = 15.0,
+        duration_s: float = 1.0,
+        min_chunk_s: float = 10.0,
         buffer_s: float = _DEFAULT_SILENCE_BUFFER_S,
         callback_interval_s: float = 0.01,
     ):

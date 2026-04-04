@@ -46,19 +46,26 @@ class RecordingController:
         on_error: Called with error message on failure.
         on_stream_chunk: Called with each transcript chunk as it completes.
         wav_output: Optional path to save recorded audio.
+        compute_device: Inference device — "cpu", "cuda", or "auto".
+        compute_type: Model precision — "int8", "float16", "float32".
     """
 
     def __init__(
         self,
         root: tk.Tk,
         *,
-        model_size: str = "small",
+        model_size: str | None = None,
         device_id: int | None = None,
         on_done: Callable[[str], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
         on_error: Callable[[str], None] | None = None,
         on_stream_chunk: Callable[[str], None] | None = None,
         wav_output: str | None = None,
+        compute_device: str | None = None,
+        compute_type: str | None = None,
+        silence_threshold: float | None = None,
+        silence_duration: float | None = None,
+        min_chunk_seconds: float | None = None,
     ):
         self._root = root
         self._model_size = model_size
@@ -68,6 +75,11 @@ class RecordingController:
         self._on_error = on_error
         self._on_stream_chunk = on_stream_chunk
         self._wav_output = wav_output
+        self._compute_device = compute_device
+        self._compute_type = compute_type
+        self._silence_threshold = silence_threshold
+        self._silence_duration = silence_duration
+        self._min_chunk_seconds = min_chunk_seconds
 
         self._settings: Settings = load_settings()
         self._session: RecordingSession | None = None
@@ -79,10 +91,32 @@ class RecordingController:
 
         Non-blocking — the caller owns the mainloop.
         """
-        start_whisper_preload()
+        preload_kwargs: dict = {}
+        if self._model_size is not None:
+            preload_kwargs["model_size"] = self._model_size
+        if self._compute_device is not None:
+            preload_kwargs["device"] = self._compute_device
+        if self._compute_type is not None:
+            preload_kwargs["compute_type"] = self._compute_type
+        start_whisper_preload(**preload_kwargs)
 
-        self._chunk_manager = ChunkManager(model_size=self._model_size)
-        silence_detector = SilenceDetector()
+        chunk_kwargs: dict = {}
+        if self._model_size is not None:
+            chunk_kwargs["model_size"] = self._model_size
+        if self._compute_device is not None:
+            chunk_kwargs["device"] = self._compute_device
+        if self._compute_type is not None:
+            chunk_kwargs["compute_type"] = self._compute_type
+        self._chunk_manager = ChunkManager(**chunk_kwargs)
+
+        silence_kwargs: dict = {}
+        if self._silence_threshold is not None:
+            silence_kwargs["threshold"] = self._silence_threshold
+        if self._silence_duration is not None:
+            silence_kwargs["duration_s"] = self._silence_duration
+        if self._min_chunk_seconds is not None:
+            silence_kwargs["min_chunk_s"] = self._min_chunk_seconds
+        silence_detector = SilenceDetector(**silence_kwargs)
 
         if self._on_stream_chunk:
             self._chunk_manager.set_stream_callback(self._on_stream_chunk)

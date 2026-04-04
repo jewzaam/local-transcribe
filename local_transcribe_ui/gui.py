@@ -269,6 +269,9 @@ class RecordingWindow:
         self._cancel_pending_afters()
         self._save_position()
 
+        # Stop the audio stream so no new samples accumulate
+        self._session.stop()
+
         # Flush and signal worker to stop
         self._chunk_manager.flush()
         self._chunk_manager.finish(timeout=0)

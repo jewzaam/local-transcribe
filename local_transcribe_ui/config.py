@@ -2,7 +2,7 @@
 """Constants, defaults, and application configuration."""
 
 import logging
-import os
+import logging.handlers
 import sys
 
 # Application identity
@@ -58,23 +58,58 @@ LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 LOG_MODULES = ("local_transcribe", "local_transcribe_ui")
 
 
-def setup_logging(debug: object = False) -> None:
+def setup_logging(
+    *, debug: bool = False, quiet: bool = False, log_file: str | None = None
+) -> None:
     """Configure logging for the application.
 
     Args:
-        debug: False for INFO level. True for DEBUG to stderr.
-            A string path for DEBUG to a file (directory created if needed).
+        debug: Enable DEBUG-level logging. Overrides quiet.
+        quiet: Suppress INFO-level output (WARNING and above only).
+        log_file: Path to write logs to file via RotatingFileHandler.
     """
-    log_level = logging.DEBUG if debug else logging.INFO
+    import types
+    from pathlib import Path
+
+    if debug:
+        log_level = logging.DEBUG
+    elif quiet:
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+
     handler: logging.Handler
-    if debug and debug is not True:
-        log_path = os.path.abspath(os.path.expanduser(str(debug)))
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    if log_file:
+        resolved = str(Path(log_file).expanduser().resolve())
+        Path(resolved).parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            resolved,
+            maxBytes=2 * 1024 * 1024,
+            backupCount=1,
+            encoding="utf-8",
+        )
     else:
         handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
     for name in LOG_MODULES:
         mod_logger = logging.getLogger(name)
         mod_logger.addHandler(handler)
         mod_logger.setLevel(log_level)
+
+    # Route uncaught exceptions through the logging system
+    root_logger = logging.getLogger(LOG_MODULES[0])
+
+    def _excepthook(
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        root_logger.critical(
+            "uncaught exception", exc_info=(exc_type, exc_value, exc_tb)
+        )
+
+    sys.excepthook = _excepthook
