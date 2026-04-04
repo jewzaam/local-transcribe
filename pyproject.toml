@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "local-transcribe"
 version = "0.1.0"
-description = "Chunked local speech-to-text engine using faster-whisper"
+description = "Chunked local speech-to-text engine and UI using faster-whisper"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -37,6 +37,7 @@ dev = [
     "black>=23.0",
     "flake8>=6.0",
     "mypy==1.11.2",
+    "radon>=5.0",
 ]
 
 [tool.mypy]
@@ -44,6 +45,9 @@ dev = [
 [[tool.mypy.overrides]]
 module = ["faster_whisper.*", "sounddevice.*"]
 ignore_missing_imports = true
+
+[project.scripts]
+local-transcribe = "local_transcribe_ui.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
