@@ -68,4 +68,4 @@ complexity: install-dev  ## Check cyclomatic complexity (max 10 per function)
 	$(PYTHON) -m radon cc local_transcribe local_transcribe_ui -n C -s
 
 run: install-dev  ## Run the voice recording UI
-	$(PYTHON) -m local_transcribe_ui
+	$(PYTHON) -m local_transcribe_ui record --model small

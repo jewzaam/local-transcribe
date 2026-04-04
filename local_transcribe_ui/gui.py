@@ -278,7 +278,7 @@ class RecordingWindow:
         self._done_btn.config(state=tk.DISABLED)
         self._status_var.set("Transcribing:")
         self._status_label.config(fg=config.COLOR_TRANSCRIBING)
-        self._level_canvas.pack_forget()
+        self._level_canvas.coords(self._level_bar, 0, 0, 0, config.LEVEL_BAR_HEIGHT)
 
         self._poll_transcription()
 
