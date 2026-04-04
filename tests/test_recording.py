@@ -10,7 +10,7 @@ from local_transcribe.recording import RecordingError, RecordingSession
 
 class TestRecordingSessionInit:
     def test_creates_with_explicit_device(self):
-        with patch("local_transcribe.recording.sd.InputStream"):
+        with patch("local_transcribe.recording._sd"):
             session = RecordingSession(device_id=0)
             assert session._device_id == 0
             assert session.chunks == []
