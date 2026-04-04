@@ -8,29 +8,120 @@ Subcommands:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
+import time
 
 from local_transcribe_ui import __version__
 from local_transcribe_ui.config import setup_logging
 
+_T_PROCESS_START = time.monotonic()
 
-def _add_debug_arg(parser: argparse.ArgumentParser) -> None:
+# Config-file keys and their built-in defaults.
+# CLI arg names match these keys (with hyphens instead of underscores).
+_CONFIG_DEFAULTS = {
+    "model": "small",
+    "compute_device": "cpu",
+    "compute_type": "int8",
+    "silence_threshold": 0.08,
+    "silence_duration": 1.0,
+    "min_chunk_seconds": 10.0,
+}
+
+
+def _load_config(path: str) -> dict:
+    """Load and return a JSON config file."""
+    resolved = os.path.abspath(os.path.expanduser(path))
+    with open(resolved, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _apply_config(args: argparse.Namespace, config: dict) -> None:
+    """Apply config file values or built-in defaults to unfilled args.
+
+    If --config is set, CLI args that overlap with config keys are an error.
+    Config file values win for all managed keys — no precedence ambiguity.
+    """
+    has_config = bool(config)
+    if has_config:
+        # Reject CLI args that conflict with config-managed keys
+        conflicts = [
+            key for key in _CONFIG_DEFAULTS if getattr(args, key, None) is not None
+        ]
+        if conflicts:
+            cli_flags = [f"--{k.replace('_', '-')}" for k in conflicts]
+            print(
+                f"error: cannot use {', '.join(cli_flags)} with --config",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    for key, builtin_default in _CONFIG_DEFAULTS.items():
+        if has_config:
+            setattr(args, key, config.get(key, builtin_default))
+        else:
+            current = getattr(args, key, None)
+            if current is None:
+                setattr(args, key, builtin_default)
+
+
+def _add_config_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="load defaults from JSON config file",
+    )
+
+
+def _add_logging_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--debug",
-        nargs="?",
-        const=True,
+        action="store_true",
         default=False,
-        metavar="LOGFILE",
-        help="Enable debug logging. Optionally specify a file path.",
+        help="enable debug logging",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        default=False,
+        help="suppress non-essential output",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="write log output to file",
+    )
+
+
+def _add_gpu_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--compute-device",
+        type=str,
+        default=None,
+        choices=["cpu", "cuda", "auto"],
+        help="inference device (default: cpu)",
+    )
+    parser.add_argument(
+        "--compute-type",
+        type=str,
+        default=None,
+        choices=["int8", "float16", "float32"],
+        help="model precision (default: int8)",
     )
 
 
 def _cmd_record(args: argparse.Namespace) -> None:
     """Record from microphone with tkinter GUI."""
-    setup_logging(args.debug)
+    setup_logging(debug=args.debug, quiet=args.quiet, log_file=args.log_file)
     logger = logging.getLogger(__name__)
+    logger.debug("startup: args parsed in %.2fs", time.monotonic() - _T_PROCESS_START)
     logger.info("local-transcribe %s", __version__)
 
     # Windows DPI awareness — must be before Tk() is created
@@ -43,27 +134,38 @@ def _cmd_record(args: argparse.Namespace) -> None:
             pass
 
     # Deferred import — only load tkinter/sounddevice when recording
+    t0 = time.monotonic()
     from local_transcribe_ui.controller import AppController
+
+    logger.debug("startup: imports in %.2fs", time.monotonic() - t0)
 
     app = AppController(
         model_size=args.model,
         device_id=args.device,
         stream_mode=args.stream,
         wav_output=args.wav_output,
+        compute_device=args.compute_device,
+        compute_type=args.compute_type,
+        silence_threshold=args.silence_threshold,
+        silence_duration=args.silence_duration,
+        min_chunk_seconds=args.min_chunk_seconds,
     )
     app.run()
 
 
 def _cmd_transcribe(args: argparse.Namespace) -> None:
     """Transcribe a WAV file — CLI-only, no GUI."""
-    setup_logging(args.debug)
+    setup_logging(debug=args.debug, quiet=args.quiet, log_file=args.log_file)
     logger = logging.getLogger(__name__)
+    logger.debug("startup: args parsed in %.2fs", time.monotonic() - _T_PROCESS_START)
     logger.info("local-transcribe %s", __version__)
 
-    import time
     import wave
 
+    t0 = time.monotonic()
     from local_transcribe import start_whisper_preload, transcribe_wav
+
+    logger.debug("startup: imports in %.2fs", time.monotonic() - t0)
     from local_transcribe_ui.protocol import emit_begin, emit_end
 
     wav_path = args.file
@@ -71,9 +173,18 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         logger.error("WAV file not found: %s", wav_path)
         sys.exit(1)
 
-    start_whisper_preload()
+    start_whisper_preload(
+        model_size=args.model,
+        device=args.compute_device,
+        compute_type=args.compute_type,
+    )
     t_start = time.time()
-    transcript = transcribe_wav(wav_path, model_size=args.model)
+    transcript = transcribe_wav(
+        wav_path,
+        model_size=args.model,
+        device=args.compute_device,
+        compute_type=args.compute_type,
+    )
     t_elapsed = time.time() - t_start
 
     try:
@@ -83,10 +194,12 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         audio_duration = 0.0
 
     logger.info(
-        "Transcribed %.1fs audio in %.1fs (model=%s)",
+        "Transcribed %.1fs audio in %.1fs (model=%s, device=%s, compute=%s)",
         audio_duration,
         t_elapsed,
         args.model,
+        args.compute_device,
+        args.compute_type,
     )
     emit_begin()
     print(transcript)
@@ -95,7 +208,7 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
 
 def _cmd_devices(args: argparse.Namespace) -> None:
     """List available audio input devices."""
-    setup_logging(args.debug)
+    setup_logging(debug=args.debug, quiet=args.quiet, log_file=args.log_file)
 
     from local_transcribe.recording import get_input_devices
 
@@ -124,7 +237,7 @@ def main() -> None:
     record_parser.add_argument(
         "--model",
         type=str,
-        default="small",
+        default=None,
         choices=["tiny", "base", "small", "medium", "large"],
         help="Whisper model size (default: small)",
     )
@@ -146,7 +259,30 @@ def main() -> None:
         action="store_true",
         help="Stream transcript chunks to stdout as they complete",
     )
-    _add_debug_arg(record_parser)
+    _add_gpu_args(record_parser)
+    record_parser.add_argument(
+        "--silence-threshold",
+        type=float,
+        default=None,
+        metavar="LEVEL",
+        help="audio level below which is silence, 0.0-1.0 (default: 0.08)",
+    )
+    record_parser.add_argument(
+        "--silence-duration",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="seconds of silence before flushing a chunk (default: 1.0)",
+    )
+    record_parser.add_argument(
+        "--min-chunk-seconds",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="minimum audio before silence flush triggers (default: 10.0)",
+    )
+    _add_config_arg(record_parser)
+    _add_logging_args(record_parser)
     record_parser.set_defaults(func=_cmd_record)
 
     # transcribe
@@ -157,18 +293,20 @@ def main() -> None:
     transcribe_parser.add_argument(
         "--model",
         type=str,
-        default="small",
+        default=None,
         choices=["tiny", "base", "small", "medium", "large"],
         help="Whisper model size (default: small)",
     )
-    _add_debug_arg(transcribe_parser)
+    _add_gpu_args(transcribe_parser)
+    _add_config_arg(transcribe_parser)
+    _add_logging_args(transcribe_parser)
     transcribe_parser.set_defaults(func=_cmd_transcribe)
 
     # devices
     devices_parser = subparsers.add_parser(
         "devices", help="List available audio input devices"
     )
-    _add_debug_arg(devices_parser)
+    _add_logging_args(devices_parser)
     devices_parser.set_defaults(func=_cmd_devices)
 
     args = parser.parse_args()
@@ -176,6 +314,12 @@ def main() -> None:
     if not hasattr(args, "func"):
         parser.print_help()
         sys.exit(1)
+
+    # Load config file if specified, apply to unfilled args
+    config = {}
+    if hasattr(args, "config") and args.config:
+        config = _load_config(args.config)
+    _apply_config(args, config)
 
     args.func(args)
 

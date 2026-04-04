@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import threading
+import time
 import wave
 from typing import Callable
 
@@ -70,8 +71,58 @@ def compute_audio_level(peak: int, *, gain: float = _DEFAULT_GAIN) -> float:
     return min(peak / 32768.0 * gain, 1.0)
 
 
-def _preload_whisper() -> None:
-    """Import faster-whisper in a background thread."""
+# DLLs that ctranslate2 needs for CUDA inference. Loading only these
+# avoids the ~5s cost of eagerly loading all 14 nvidia DLLs.
+_CUDA_DLLS = ("cublas64_12.dll", "cublasLt64_12.dll", "cudnn64_9.dll")
+
+
+def _register_nvidia_dll_paths() -> None:
+    """Load nvidia CUDA DLLs on Windows.
+
+    The nvidia-cublas-cu12/nvidia-cudnn-cu12 pip packages install DLLs
+    into site-packages/nvidia/*/bin/. ctranslate2 can't find them at
+    inference time without eager loading via ctypes.CDLL.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        import importlib.util
+
+        spec = importlib.util.find_spec("nvidia")
+        if spec is None or spec.submodule_search_locations is None:
+            return
+
+        # Build a map of DLL filename -> full path for targeted loading
+        dll_paths: dict[str, str] = {}
+        for nvidia_dir in spec.submodule_search_locations:
+            for entry in os.scandir(nvidia_dir):
+                if entry.is_dir():
+                    bin_dir = os.path.join(entry.path, "bin")
+                    if os.path.isdir(bin_dir):
+                        os.add_dll_directory(bin_dir)
+                        for dll_entry in os.scandir(bin_dir):
+                            if dll_entry.name.endswith(".dll"):
+                                dll_paths[dll_entry.name] = dll_entry.path
+
+        for name in _CUDA_DLLS:
+            path = dll_paths.get(name)
+            if path:
+                try:
+                    ctypes.CDLL(path)
+                    logger.debug("loaded DLL: %s", path)
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
+def _preload_whisper(
+    model_size: str | None = None,
+    device: str | None = None,
+    compute_type: str | None = None,
+) -> None:
+    """Import faster-whisper and optionally warm the model cache."""
     global _WhisperModel
     try:
         from faster_whisper import WhisperModel
@@ -82,15 +133,44 @@ def _preload_whisper() -> None:
     finally:
         _whisper_module_ready.set()
 
+    # Eagerly load the model so it's cached before the first chunk arrives
+    if model_size is not None and _WhisperModel is not None:
+        try:
+            get_or_create_model(
+                model_size=model_size,
+                device=device or _DEFAULT_DEVICE,
+                compute_type=compute_type or _DEFAULT_COMPUTE_TYPE,
+            )
+        except Exception as e:
+            logger.warning("model preload failed: %s", e)
 
-def start_whisper_preload() -> None:
-    """Kick off the background import. Safe to call multiple times."""
+
+def start_whisper_preload(
+    *,
+    model_size: str | None = None,
+    device: str | None = None,
+    compute_type: str | None = None,
+) -> None:
+    """Kick off background import and optional model preload.
+
+    Args:
+        model_size: If provided, eagerly load this model in the background.
+        device: Inference device for preloading.
+        compute_type: Model precision for preloading.
+    """
     global _whisper_preload_started
     with _whisper_preload_lock:
         if _whisper_preload_started:
             return
         _whisper_preload_started = True
-    threading.Thread(target=_preload_whisper, daemon=True).start()
+    # Register nvidia DLL paths on the main thread before the background
+    # import triggers ctranslate2's DLL search.
+    _register_nvidia_dll_paths()
+    threading.Thread(
+        target=_preload_whisper,
+        args=(model_size, device, compute_type),
+        daemon=True,
+    ).start()
 
 
 def _get_model_class():
@@ -128,12 +208,22 @@ def get_or_create_model(
 
     with _model_lock:
         if _cached_model is not None and _cached_model_key == key:
+            logger.debug("model cache hit: %s/%s/%s", *key)
             return _cached_model
 
+        logger.debug(
+            "loading model: size=%s, device=%s, compute_type=%s",
+            model_size,
+            device,
+            compute_type,
+        )
         model_cls = _get_model_class()
 
+        t0 = time.monotonic()
         with _suppress_stdout():
             model = model_cls(model_size, device=device, compute_type=compute_type)
+        elapsed = time.monotonic() - t0
+        logger.debug("model loaded in %.2fs", elapsed)
 
         _cached_model = model
         _cached_model_key = key
@@ -166,6 +256,10 @@ def _run_transcription(
         beam_size: Beam search width. Lower = faster, higher = more accurate.
         progress_callback: Called with progress fraction (0.0-1.0).
     """
+    logger.debug(
+        "transcribing: duration=%.1fs, beam_size=%d", audio_duration, beam_size
+    )
+    t0 = time.monotonic()
     with _suppress_stdout():
         segments, _ = model.transcribe(source, beam_size=beam_size)
         text_parts = []
@@ -174,9 +268,17 @@ def _run_transcription(
             if progress_callback and audio_duration > 0:
                 fraction = min(seg.end / audio_duration, 1.0)
                 progress_callback(fraction)
+    elapsed = time.monotonic() - t0
     if progress_callback:
         progress_callback(1.0)
-    return _sanitize_transcript(" ".join(text_parts).strip())
+    result = _sanitize_transcript(" ".join(text_parts).strip())
+    logger.debug(
+        "transcription complete: %.2fs elapsed, %.1fx realtime, %d chars",
+        elapsed,
+        audio_duration / elapsed if elapsed > 0 else 0,
+        len(result),
+    )
+    return result
 
 
 def transcribe_wav(

@@ -9,6 +9,7 @@ Local speech-to-text using faster-whisper. Record from a microphone with a tkint
 
 - **[Architecture](docs/architecture.md)** — engine/UI separation, module responsibilities
 - **[CLI Reference](docs/cli.md)** — subcommands, options, examples
+- **[Configuration](docs/config.md)** — config file, GPU setup, silence tuning
 
 ## Overview
 
@@ -29,6 +30,13 @@ cd local-transcribe
 make install-dev
 ```
 
+### Global (pipx)
+
+```bash
+make pipx            # install CLI globally
+make pipx-cuda       # inject NVIDIA CUDA libs for GPU acceleration
+```
+
 ### From Git
 
 ```bash
@@ -41,14 +49,15 @@ pip install git+https://github.com/jewzaam/local-transcribe.git
 
 ```bash
 local-transcribe record
-local-transcribe record --model small --device 0 --stream
+local-transcribe record --model large --compute-device cuda --compute-type float16
+local-transcribe record --config ~/.config/local-transcribe-config.json
 ```
 
 ### Transcribe a WAV file
 
 ```bash
 local-transcribe transcribe recording.wav
-local-transcribe transcribe recording.wav --model tiny
+local-transcribe transcribe recording.wav --model large --compute-device cuda --compute-type float16
 ```
 
 ### List audio devices
@@ -57,28 +66,22 @@ local-transcribe transcribe recording.wav --model tiny
 local-transcribe devices
 ```
 
-### As a library
+### As an embedded UI
 
 ```python
-from local_transcribe import (
-    ChunkManager,
-    RecordingSession,
-    SilenceDetector,
-    start_whisper_preload,
+from local_transcribe_ui import RecordingController
+
+def on_transcript(text: str):
+    chat.send_message(text)
+
+controller = RecordingController(
+    root,  # existing tk.Tk root
+    on_done=on_transcript,
+    compute_device="cuda",
+    compute_type="float16",
 )
-
-start_whisper_preload()
-
-mgr = ChunkManager(model_size="small")
-det = SilenceDetector()
-session = RecordingSession(chunk_manager=mgr, silence_detector=det)
-
-mgr.start_worker()
-session.start()
-# ... recording happens ...
-audio = session.stop()
-mgr.finish()
-print(mgr.get_transcript())
+controller.start()
+# Window appears, user records, on_done fires, window closes
 ```
 
 ## Development
