@@ -1,10 +1,13 @@
 # Makefile for local-transcribe
 
 -include make/pipx.mk
+-include make/version-check.mk
 
 .PHONY: check help install install-dev install-no-deps uninstall clean format format-check lint typecheck test test-verbose coverage complexity mutation mutation-report run
 
 PACKAGE_NAME ?= local_transcribe local_transcribe_ui
+VERSION_FILE ?= local_transcribe/__init__.py
+VERSION_DIRS ?= local_transcribe/ local_transcribe_ui/
 
 ifeq ($(OS),Windows_NT)
     VENV_DIR ?= .venv

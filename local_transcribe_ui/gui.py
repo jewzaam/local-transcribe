@@ -18,7 +18,7 @@ from local_transcribe_ui import config
 from local_transcribe_ui.settings import Settings, save_settings
 
 if TYPE_CHECKING:
-    from local_transcribe_ui.controller import AppController
+    from local_transcribe_ui.recording_controller import RecordingController
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class RecordingWindow:
 
     Args:
         root: Hidden tk.Tk root for after() scheduling.
-        controller: AppController for lifecycle callbacks.
+        controller: RecordingController for lifecycle callbacks.
         settings: Current settings (window position).
         session: Active RecordingSession from the engine.
         chunk_manager: ChunkManager for background transcription.
@@ -59,7 +59,7 @@ class RecordingWindow:
     def __init__(
         self,
         root: tk.Tk,
-        controller: AppController,
+        controller: RecordingController,
         settings: Settings,
         session: RecordingSession,
         chunk_manager: ChunkManager,
