@@ -23,9 +23,10 @@ def speech_audio():
 @pytest.fixture
 def mock_recording_session():
     """A RecordingSession with mocked device access."""
+    mock_sd = MagicMock()
     with (
         patch("local_transcribe.recording.get_default_input_device", return_value=0),
-        patch("local_transcribe.recording.sd.InputStream"),
+        patch("local_transcribe.recording._sd", return_value=mock_sd),
     ):
         from local_transcribe.recording import RecordingSession
 

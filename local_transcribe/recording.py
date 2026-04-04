@@ -5,11 +5,13 @@ Provides RecordingSession for capturing audio from a microphone with
 level metering and silence-triggered chunk flushing. No GUI dependency.
 """
 
+from __future__ import annotations
+
 import logging
 import time
+from typing import Any
 
 import numpy as np
-import sounddevice as sd
 
 from local_transcribe.chunking import ChunkManager, SilenceDetector
 from local_transcribe.transcription import (
@@ -23,15 +25,22 @@ logger = logging.getLogger(__name__)
 AUDIO_DTYPE = "int16"
 
 
+def _sd():
+    """Lazy import of sounddevice (requires PortAudio)."""
+    import sounddevice as sd
+
+    return sd
+
+
 class RecordingError(Exception):
     """Raised when audio recording fails."""
 
 
 def get_default_input_device() -> int:
     """Return the sounddevice index of the system default input device."""
-    default = sd.default.device[0]
+    default = _sd().default.device[0]
     if not isinstance(default, int) or default < 0:
-        devices = sd.query_devices()
+        devices = _sd().query_devices()
         for i, dev in enumerate(devices):
             if dev["max_input_channels"] > 0:
                 return i
@@ -41,7 +50,7 @@ def get_default_input_device() -> int:
 
 def get_input_devices() -> list[dict]:
     """Return a list of available input devices with id and name."""
-    devices = sd.query_devices()
+    devices = _sd().query_devices()
     result = []
     for i, dev in enumerate(devices):
         if dev["max_input_channels"] > 0:
@@ -89,7 +98,7 @@ class RecordingSession:
         self._current_level = 0.0
         self._silence_flush_boundary: int | None = None
 
-        self._stream: sd.InputStream | None = None
+        self._stream: Any = None
 
         if chunk_manager is not None:
             chunk_manager.bind_chunks(self._chunks)
@@ -142,7 +151,7 @@ class RecordingSession:
             RecordingError: If the microphone cannot be accessed.
         """
         try:
-            self._stream = sd.InputStream(
+            self._stream = _sd().InputStream(
                 samplerate=SAMPLE_RATE,
                 channels=AUDIO_CHANNELS,
                 dtype=AUDIO_DTYPE,
