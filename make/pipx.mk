@@ -1,0 +1,14 @@
+# Optional target: install CLI tools globally via pipx.
+# Requires: python3 -m pip install --user pipx
+
+.PHONY: pipx pipx-uninstall
+
+# PROJECT_NAME is the distribution name from [project] name in pyproject.toml.
+# This may differ from PACKAGE_NAME (the Python module name) — e.g., my-tool vs my_tool.
+PROJECT_NAME ?= local-transcribe
+
+pipx:  ## Install globally via pipx
+	python3 -m pipx install . --force
+
+pipx-uninstall:  ## Uninstall global pipx install
+	python3 -m pipx uninstall $(PROJECT_NAME)
