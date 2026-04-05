@@ -38,14 +38,29 @@ class TestAppControllerCancel:
 
         app_controller._on_cancel()  # should not raise
 
-    def test_cancel_does_not_emit_markers(self, app_controller, capsys):
-        """Protocol markers are emitted by GUI layer, not AppController."""
-        app_controller._root = MagicMock()
+    def test_cancel_emits_cancel_marker(self, app_controller, tmp_path):
+        """AppController emits [CANCEL] via os.write for CLI consumers."""
+        import subprocess
+        import sys
 
-        app_controller._on_cancel()
-
-        captured = capsys.readouterr()
-        assert "[CANCEL]" not in captured.out
+        script = tmp_path / "test_cancel.py"
+        script.write_text(
+            "from unittest.mock import MagicMock\n"
+            "from local_transcribe_ui.controller import AppController\n"
+            "app = AppController(\n"
+            "    model_size='small', compute_device='cpu', compute_type='int8',\n"
+            "    silence_threshold=0.08, silence_duration=1.0,\n"
+            "    min_chunk_seconds=10.0,\n"
+            ")\n"
+            "app._root = MagicMock()\n"
+            "app._on_cancel()\n"
+        )
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+        )
+        assert "[CANCEL]" in result.stdout
 
 
 class TestAppControllerDone:

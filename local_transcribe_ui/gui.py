@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from local_transcribe.recording import RecordingSession
 from local_transcribe.chunking import ChunkManager
 from local_transcribe_ui import config
-from local_transcribe_ui.protocol import emit_cancel
 from local_transcribe_ui.settings import Settings, save_settings
 
 if TYPE_CHECKING:
@@ -245,14 +244,13 @@ class RecordingWindow:
 
     def _on_cancel(self) -> None:
         self._cancelled = True
-        emit_cancel()
         self._cancel_pending_afters()
         self._save_position()
         if self._window:
             self._window.destroy()
             self._window = None
-        # Schedule controller cleanup via root.after so it runs outside
-        # the tkinter event handler (same pattern as Done).
+        # Schedule via root.after so the callback runs outside the tkinter
+        # event handler — same pattern as Done's _poll_transcription path.
         self._root.after(0, self._finish_cancel)
 
     def _finish_cancel(self) -> None:
