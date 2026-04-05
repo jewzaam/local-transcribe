@@ -15,8 +15,11 @@ def emit_end() -> None:
 
 
 def emit_cancel() -> None:
-    """Print the [CANCEL] marker to stdout.
+    """Write the [CANCEL] marker to stdout.
 
-    Flushes immediately since cancel is always followed by process exit.
+    Uses os.write to bypass any buffering or redirection that tkinter
+    may apply to sys.stdout during event handler processing.
     """
-    print("[CANCEL]", flush=True)
+    import os
+
+    os.write(1, b"[CANCEL]\n")

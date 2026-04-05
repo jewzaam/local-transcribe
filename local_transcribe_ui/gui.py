@@ -245,17 +245,17 @@ class RecordingWindow:
 
     def _on_cancel(self) -> None:
         self._cancelled = True
+        emit_cancel()
         self._cancel_pending_afters()
         self._save_position()
         if self._window:
             self._window.destroy()
             self._window = None
-        # Schedule cancel handling via root.after so protocol output
-        # happens outside the tkinter event handler (same pattern as Done).
+        # Schedule controller cleanup via root.after so it runs outside
+        # the tkinter event handler (same pattern as Done).
         self._root.after(0, self._finish_cancel)
 
     def _finish_cancel(self) -> None:
-        emit_cancel()
         self._controller.on_recording_cancelled()
 
     def _on_toggle_pause(self) -> None:

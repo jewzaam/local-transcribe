@@ -2,7 +2,7 @@
 """Tests for local_transcribe_ui.protocol module."""
 
 from local_transcribe_ui import __version__
-from local_transcribe_ui.protocol import emit_begin, emit_cancel, emit_end
+from local_transcribe_ui.protocol import emit_begin, emit_end
 
 
 class TestProtocol:
@@ -21,7 +21,18 @@ class TestProtocol:
         captured = capsys.readouterr()
         assert captured.out == "[END]\n"
 
-    def test_emit_cancel(self, capsys):
-        emit_cancel()
-        captured = capsys.readouterr()
-        assert captured.out == "[CANCEL]\n"
+    def test_emit_cancel(self, tmp_path):
+        """emit_cancel uses os.write(1) to bypass Python buffering."""
+        import subprocess
+        import sys
+
+        script = tmp_path / "test_cancel.py"
+        script.write_text(
+            "from local_transcribe_ui.protocol import emit_cancel\nemit_cancel()\n"
+        )
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout == "[CANCEL]\n"
