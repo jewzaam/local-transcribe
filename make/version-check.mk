@@ -2,47 +2,5 @@
 
 .PHONY: version-check
 
-VERSION_FILE ?=
-VERSION_DIRS ?=
-
-# Official semver.org regex (https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string)
-SEMVER_RE := ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$$
-
 version-check:  ## Validate semver: format, sources match, version bumped vs mainline
-	@toml_ver=$$(grep -m1 '^version\s*=' pyproject.toml | sed 's/.*"\(.*\)".*/\1/') && \
-	if ! echo "$$toml_ver" | grep -Pq '$(SEMVER_RE)'; then \
-		echo "version-check: FAIL — pyproject.toml version '$$toml_ver' is not valid semver (see https://semver.org)" >&2 && exit 1; \
-	fi && \
-	if [ -n "$(VERSION_FILE)" ] && [ -f "$(VERSION_FILE)" ]; then \
-		code_ver=$$(grep -m1 '__version__' "$(VERSION_FILE)" | sed 's/.*"\(.*\)".*/\1/') && \
-		if [ "$$toml_ver" != "$$code_ver" ]; then \
-			echo "version-check: FAIL — pyproject.toml has '$$toml_ver' but $(VERSION_FILE) has '$$code_ver'" >&2 && exit 1; \
-		fi; \
-	fi && \
-	mainline="" && \
-	if git rev-parse --verify main >/dev/null 2>&1; then mainline=main; \
-	elif git rev-parse --verify origin/main >/dev/null 2>&1; then mainline=origin/main; \
-	elif git rev-parse --verify master >/dev/null 2>&1; then mainline=master; \
-	elif git rev-parse --verify origin/master >/dev/null 2>&1; then mainline=origin/master; \
-	fi && \
-	if [ -n "$$mainline" ]; then \
-		base=$$(git merge-base HEAD "$$mainline" 2>/dev/null) && \
-		if [ -n "$$base" ]; then \
-			if [ -n "$(VERSION_DIRS)" ]; then \
-				source_changes=$$(git diff --name-only "$$base" HEAD -- $(VERSION_DIRS)) && \
-				if [ -z "$$source_changes" ]; then \
-					echo "version-check: PASS — $$toml_ver (no source changes in: $(VERSION_DIRS))"; \
-					exit 0; \
-				fi; \
-			fi && \
-			base_ver=$$(git show "$$base:pyproject.toml" 2>/dev/null | grep -m1 '^version\s*=' | sed 's/.*"\(.*\)".*/\1/') && \
-			if [ -n "$$base_ver" ] && [ "$$toml_ver" = "$$base_ver" ]; then \
-				echo "version-check: FAIL — version not bumped: both current and $$mainline have '$$toml_ver'" >&2 && exit 1; \
-			fi && \
-			echo "version-check: PASS — $${base_ver:-new} -> $$toml_ver"; \
-		else \
-			echo "version-check: PASS — $$toml_ver (no common ancestor with $$mainline)"; \
-		fi; \
-	else \
-		echo "version-check: PASS — $$toml_ver (no mainline branch found, bump check skipped)"; \
-	fi
+	@bash scripts/version-check.sh "$(VERSION_FILE)" $(VERSION_DIRS)
