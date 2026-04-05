@@ -184,6 +184,7 @@ class ChunkManager:
         self._queue: queue.Queue[np.ndarray | None] = queue.Queue()
         self._transcripts: list[str] = []
         self._errors: list[Exception] = []
+        self._fatal_error: RuntimeError | None = None
         self._stream_callback: Callable[[str], None] | None = None
         self._total_samples_sent: int = 0
         self._total_samples_done: int = 0
@@ -279,6 +280,11 @@ class ChunkManager:
         """True when worker has finished processing all chunks."""
         return self._finished.is_set()
 
+    @property
+    def fatal_error(self) -> RuntimeError | None:
+        """Non-recoverable error that stopped the worker, if any."""
+        return self._fatal_error
+
     def _worker_loop(self) -> None:
         """Process chunks from the queue until sentinel."""
         chunk_num = 0
@@ -342,9 +348,15 @@ class ChunkManager:
                         )
                     else:
                         logger.debug("chunk %d: no speech detected", chunk_num)
+                except RuntimeError:
+                    # Non-recoverable (missing DLLs, CUDA failures) — stop
+                    raise
                 except Exception as e:
                     logger.error("Chunk transcription failed: %s", e)
                     self._errors.append(e)
                     self._total_samples_done += len(item)
+        except RuntimeError as e:
+            logger.error("Fatal transcription error: %s", e)
+            self._fatal_error = e
         finally:
             self._finished.set()

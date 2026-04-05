@@ -254,7 +254,7 @@ class TestChunkManagerWorker:
 
         assert streamed == ["streamed text"]
 
-    def test_worker_handles_transcription_error(self):
+    def test_worker_fatal_error_stops_worker(self):
         mgr = ChunkManager(model_size="tiny", sample_rate=SAMPLE_RATE)
         chunks = [np.full(SAMPLE_RATE, 10000, dtype=np.int16)]
         mgr.bind_chunks(chunks)
@@ -268,6 +268,25 @@ class TestChunkManagerWorker:
             mgr.finish(timeout=5.0)
 
         assert mgr.is_done()
+        assert mgr.fatal_error is not None
+        assert "model failed" in str(mgr.fatal_error)
+        assert mgr.get_transcript() == ""
+
+    def test_worker_handles_non_fatal_error(self):
+        mgr = ChunkManager(model_size="tiny", sample_rate=SAMPLE_RATE)
+        chunks = [np.full(SAMPLE_RATE, 10000, dtype=np.int16)]
+        mgr.bind_chunks(chunks)
+
+        with patch(
+            "local_transcribe.chunking.transcribe_audio",
+            side_effect=ValueError("bad audio"),
+        ):
+            mgr.start_worker()
+            mgr.flush()
+            mgr.finish(timeout=5.0)
+
+        assert mgr.is_done()
+        assert mgr.fatal_error is None
         assert len(mgr._errors) == 1
         assert mgr.get_transcript() == ""
 
