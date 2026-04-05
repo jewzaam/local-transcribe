@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from local_transcribe.recording import RecordingSession
 from local_transcribe.chunking import ChunkManager
 from local_transcribe_ui import config
+from local_transcribe_ui.protocol import emit_cancel
 from local_transcribe_ui.settings import Settings, save_settings
 
 if TYPE_CHECKING:
@@ -249,6 +250,12 @@ class RecordingWindow:
         if self._window:
             self._window.destroy()
             self._window = None
+        # Schedule cancel handling via root.after so protocol output
+        # happens outside the tkinter event handler (same pattern as Done).
+        self._root.after(0, self._finish_cancel)
+
+    def _finish_cancel(self) -> None:
+        emit_cancel()
         self._controller.on_recording_cancelled()
 
     def _on_toggle_pause(self) -> None:

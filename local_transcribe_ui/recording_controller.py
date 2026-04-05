@@ -155,20 +155,19 @@ class RecordingController:
 
     def on_recording_done(self) -> None:
         """Called by RecordingWindow when transcription completes."""
-        assert self._session is not None
-        assert self._chunk_manager is not None
-
-        try:
-            audio_data = self._session.stop()
-        except RecordingError:
-            audio_data = None
+        audio_data = None
+        if self._session is not None:
+            try:
+                audio_data = self._session.stop()
+            except RecordingError:
+                pass
 
         if self._wav_output and audio_data is not None:
             wav_path = os.path.abspath(self._wav_output)
             save_wav_to(audio_data, wav_path)
             logger.info("Saved audio to %s", wav_path)
 
-        transcript = self._chunk_manager.get_transcript()
+        transcript = self._chunk_manager.get_transcript() if self._chunk_manager else ""
 
         if self._recording_window:
             self._recording_window.destroy()
@@ -179,8 +178,8 @@ class RecordingController:
 
     def on_recording_cancelled(self) -> None:
         """Called by RecordingWindow when user cancels."""
-        assert self._session is not None
-        self._session.abort()
+        if self._session is not None:
+            self._session.abort()
 
         if self._recording_window:
             self._recording_window.destroy()
