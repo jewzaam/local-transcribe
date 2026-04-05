@@ -188,6 +188,18 @@ class RecordingController:
         if self._on_cancel:
             self._on_cancel()
 
+    def on_recording_error(self, error: str) -> None:
+        """Called by RecordingWindow when a fatal error occurs."""
+        if self._session is not None:
+            self._session.abort()
+
+        if self._recording_window:
+            self._recording_window.destroy()
+            self._recording_window = None
+
+        if self._on_error:
+            self._on_error(error)
+
     @property
     def is_active(self) -> bool:
         """Whether a recording session is currently active."""

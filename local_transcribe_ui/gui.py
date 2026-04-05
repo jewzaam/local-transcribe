@@ -298,7 +298,13 @@ class RecordingWindow:
         self._chunk_canvas.coords(self._chunk_bar_queued, 0, 0, queued_w, h)
         self._chunk_canvas.coords(self._chunk_bar_done, 0, 0, done_w, h)
 
-        if self._chunk_manager.is_done():
+        fatal = self._chunk_manager.fatal_error
+        if fatal is not None:
+            if self._window:
+                self._window.destroy()
+                self._window = None
+            self._controller.on_recording_error(str(fatal))
+        elif self._chunk_manager.is_done():
             if self._window:
                 self._window.destroy()
                 self._window = None
