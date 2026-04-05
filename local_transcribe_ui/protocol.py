@@ -15,5 +15,8 @@ def emit_end() -> None:
 
 
 def emit_cancel() -> None:
-    """Print the [CANCEL] marker to stdout."""
-    print("[CANCEL]")
+    """Print the [CANCEL] marker to stdout.
+
+    Flushes immediately since cancel is always followed by process exit.
+    """
+    print("[CANCEL]", flush=True)

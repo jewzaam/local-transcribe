@@ -13,7 +13,7 @@ import tkinter as tk
 
 from local_transcribe_ui import config
 from local_transcribe_ui.lock import LockAcquireError, acquire_lock, release_lock
-from local_transcribe_ui.protocol import emit_begin, emit_cancel, emit_end
+from local_transcribe_ui.protocol import emit_begin, emit_end
 from local_transcribe_ui.recording_controller import RecordingController
 
 logger = logging.getLogger(__name__)
@@ -115,10 +115,8 @@ class AppController:
         self._shutdown()
 
     def _on_cancel(self) -> None:
-        """Handle cancellation — emit cancel marker and exit."""
-        emit_cancel()
+        """Handle cancellation — shut down GUI."""
         self._shutdown()
-        sys.exit(config.EXIT_SUCCESS)
 
     def _on_error(self, error: str) -> None:
         """Handle error — log and exit."""
