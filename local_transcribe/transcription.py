@@ -245,6 +245,8 @@ def _run_transcription(
     *,
     audio_duration: float,
     beam_size: int = _DEFAULT_BEAM_SIZE,
+    vad_filter: bool = False,
+    condition_on_previous_text: bool = True,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """Run transcription with stdout suppression and progress tracking.
@@ -254,14 +256,28 @@ def _run_transcription(
         source: WAV file path or float32 numpy array.
         audio_duration: Duration in seconds (for progress fraction).
         beam_size: Beam search width. Lower = faster, higher = more accurate.
+        vad_filter: Enable Silero VAD to filter non-speech audio before
+            transcription. Reduces hallucinations on silence.
+        condition_on_previous_text: Use previous segment output as prompt for
+            the next. Disabling prevents hallucination cascades.
         progress_callback: Called with progress fraction (0.0-1.0).
     """
     logger.debug(
-        "transcribing: duration=%.1fs, beam_size=%d", audio_duration, beam_size
+        "transcribing: duration=%.1fs, beam_size=%d, vad_filter=%s, "
+        "condition_on_previous_text=%s",
+        audio_duration,
+        beam_size,
+        vad_filter,
+        condition_on_previous_text,
     )
     t0 = time.monotonic()
     with _suppress_stdout():
-        segments, _ = model.transcribe(source, beam_size=beam_size)
+        segments, _ = model.transcribe(
+            source,
+            beam_size=beam_size,
+            vad_filter=vad_filter,
+            condition_on_previous_text=condition_on_previous_text,
+        )
         text_parts = []
         for seg in segments:
             text_parts.append(seg.text.strip())
@@ -288,6 +304,8 @@ def transcribe_wav(
     device: str = _DEFAULT_DEVICE,
     compute_type: str = _DEFAULT_COMPUTE_TYPE,
     beam_size: int = _DEFAULT_BEAM_SIZE,
+    vad_filter: bool = False,
+    condition_on_previous_text: bool = True,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """Transcribe a WAV file using faster-whisper.
@@ -298,6 +316,8 @@ def transcribe_wav(
         device: Inference device — "cpu", "cuda", or "auto".
         compute_type: Model precision — "int8", "float16", "float32".
         beam_size: Beam search width. Lower = faster, higher = more accurate.
+        vad_filter: Enable Silero VAD to filter non-speech audio.
+        condition_on_previous_text: Use previous segment as prompt for next.
         progress_callback: Called with progress fraction (0.0-1.0) after each
             segment, based on segment end time / audio duration.
     """
@@ -319,6 +339,8 @@ def transcribe_wav(
             wav_path,
             audio_duration=audio_duration,
             beam_size=beam_size,
+            vad_filter=vad_filter,
+            condition_on_previous_text=condition_on_previous_text,
             progress_callback=progress_callback,
         )
     except Exception as e:
@@ -339,6 +361,8 @@ def transcribe_audio(
     device: str = _DEFAULT_DEVICE,
     compute_type: str = _DEFAULT_COMPUTE_TYPE,
     beam_size: int = _DEFAULT_BEAM_SIZE,
+    vad_filter: bool = True,
+    condition_on_previous_text: bool = True,
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """Transcribe raw audio data (int16 numpy array) using faster-whisper.
@@ -352,6 +376,8 @@ def transcribe_audio(
         device: Inference device — "cpu", "cuda", or "auto".
         compute_type: Model precision — "int8", "float16", "float32".
         beam_size: Beam search width. Lower = faster, higher = more accurate.
+        vad_filter: Enable Silero VAD to filter non-speech audio.
+        condition_on_previous_text: Use previous segment as prompt for next.
         progress_callback: Called with progress fraction (0.0-1.0).
     """
     logger.info("Transcribing with model '%s'...", model_size)
@@ -369,6 +395,8 @@ def transcribe_audio(
             audio_float,
             audio_duration=audio_duration,
             beam_size=beam_size,
+            vad_filter=vad_filter,
+            condition_on_previous_text=condition_on_previous_text,
             progress_callback=progress_callback,
         )
     except Exception as e:
