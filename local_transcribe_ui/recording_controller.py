@@ -66,6 +66,8 @@ class RecordingController:
         silence_threshold: float | None = None,
         silence_duration: float | None = None,
         min_chunk_seconds: float | None = None,
+        vad_filter: bool = True,
+        condition_on_previous_text: bool = True,
     ):
         self._root = root
         self._model_size = model_size
@@ -80,6 +82,8 @@ class RecordingController:
         self._silence_threshold = silence_threshold
         self._silence_duration = silence_duration
         self._min_chunk_seconds = min_chunk_seconds
+        self._vad_filter = vad_filter
+        self._condition_on_previous_text = condition_on_previous_text
 
         self._settings: Settings = load_settings()
         self._session: RecordingSession | None = None
@@ -107,6 +111,8 @@ class RecordingController:
             chunk_kwargs["device"] = self._compute_device
         if self._compute_type is not None:
             chunk_kwargs["compute_type"] = self._compute_type
+        chunk_kwargs["vad_filter"] = self._vad_filter
+        chunk_kwargs["condition_on_previous_text"] = self._condition_on_previous_text
         self._chunk_manager = ChunkManager(**chunk_kwargs)
 
         silence_kwargs: dict = {}

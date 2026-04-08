@@ -28,6 +28,8 @@ _CONFIG_DEFAULTS = {
     "silence_threshold": 0.08,
     "silence_duration": 1.0,
     "min_chunk_seconds": 10.0,
+    "vad_filter": True,
+    "condition_on_previous_text": True,
 }
 
 
@@ -100,6 +102,33 @@ def _add_logging_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_whisper_args(parser: argparse.ArgumentParser) -> None:
+    """Add Whisper transcription behavior args (config-managed)."""
+    parser.add_argument(
+        "--vad-filter",
+        type=_parse_bool,
+        default=None,
+        metavar="BOOL",
+        help="enable Silero VAD to filter non-speech audio (default: true)",
+    )
+    parser.add_argument(
+        "--condition-on-previous-text",
+        type=_parse_bool,
+        default=None,
+        metavar="BOOL",
+        help="use previous segment as prompt for next (default: true)",
+    )
+
+
+def _parse_bool(value: str) -> bool:
+    """Parse a boolean CLI argument value."""
+    if value.lower() in ("true", "1", "yes"):
+        return True
+    if value.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"expected true/false, got '{value}'")
+
+
 def _add_gpu_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--compute-device",
@@ -149,6 +178,8 @@ def _cmd_record(args: argparse.Namespace) -> None:
         silence_threshold=args.silence_threshold,
         silence_duration=args.silence_duration,
         min_chunk_seconds=args.min_chunk_seconds,
+        vad_filter=args.vad_filter,
+        condition_on_previous_text=args.condition_on_previous_text,
     )
     app.run()
 
@@ -184,6 +215,8 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         model_size=args.model,
         device=args.compute_device,
         compute_type=args.compute_type,
+        vad_filter=args.vad_filter,
+        condition_on_previous_text=args.condition_on_previous_text,
     )
     t_elapsed = time.time() - t_start
 
@@ -281,6 +314,7 @@ def main() -> None:
         metavar="SECONDS",
         help="minimum audio before silence flush triggers (default: 10.0)",
     )
+    _add_whisper_args(record_parser)
     _add_config_arg(record_parser)
     _add_logging_args(record_parser)
     record_parser.set_defaults(func=_cmd_record)
@@ -298,6 +332,7 @@ def main() -> None:
         help="Whisper model size (default: small)",
     )
     _add_gpu_args(transcribe_parser)
+    _add_whisper_args(transcribe_parser)
     _add_config_arg(transcribe_parser)
     _add_logging_args(transcribe_parser)
     transcribe_parser.set_defaults(func=_cmd_transcribe)

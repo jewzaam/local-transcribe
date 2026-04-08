@@ -173,12 +173,16 @@ class ChunkManager:
         compute_type: str = _DEFAULT_COMPUTE_TYPE,
         beam_size: int = _DEFAULT_BEAM_SIZE,
         sample_rate: int = SAMPLE_RATE,
+        vad_filter: bool = True,
+        condition_on_previous_text: bool = True,
     ):
         self._model_size = model_size
         self._device = device
         self._compute_type = compute_type
         self._beam_size = beam_size
         self._sample_rate = sample_rate
+        self._vad_filter = vad_filter
+        self._condition_on_previous_text = condition_on_previous_text
         self._chunks_ref: list[np.ndarray] | None = None
         self._boundary: int = 0
         self._queue: queue.Queue[np.ndarray | None] = queue.Queue()
@@ -333,6 +337,8 @@ class ChunkManager:
                         device=self._device,
                         compute_type=self._compute_type,
                         beam_size=self._beam_size,
+                        vad_filter=self._vad_filter,
+                        condition_on_previous_text=(self._condition_on_previous_text),
                         progress_callback=on_segment_progress,
                     )
                     # Ensure we account for the full chunk

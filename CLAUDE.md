@@ -37,11 +37,34 @@ Integration tests (require model download) are excluded by default. Run with: `p
     "compute_type": "int8",
     "silence_threshold": 0.08,
     "silence_duration": 1.0,
-    "min_chunk_seconds": 10.0
+    "min_chunk_seconds": 10.0,
+    "vad_filter": true,
+    "condition_on_previous_text": true
 }
 ```
 
 CLI args that overlap with config keys are rejected when `--config` is used — no precedence ambiguity.
+
+## CLI subcommands
+
+### `record` — mic capture with GUI
+Launches tkinter window, records audio, transcribes in chunks. Output wrapped in `[BEGIN]`/`[END]` markers on stdout.
+
+### `transcribe` — WAV file transcription (no GUI)
+```bash
+local-transcribe transcribe <file.wav> [--model small] [--vad-filter true|false] [--condition-on-previous-text true|false] [--debug --log-file <path>]
+```
+Output wrapped in `[BEGIN]`/`[END]` markers on stdout.
+
+### `devices` — list audio input devices
+
+## Logging
+
+- `--debug` enables DEBUG-level logging
+- `--log-file PATH` writes logs to file; **without it, logs go to stderr**
+- `--quiet` suppresses INFO (WARNING+ only)
+
+When capturing transcript output via stdout redirect, use `--log-file` to avoid debug logs mixing into stderr alongside any other stderr output.
 
 ## CPU-only systems
 
@@ -49,7 +72,7 @@ Defaults are already CPU-safe (`compute_device: "cpu"`, `compute_type: "int8"`).
 
 ## Version
 
-Single source of truth: `local_transcribe/__init__.py` (`__version__`). Currently `0.4.0`.
+Single source of truth: `local_transcribe/__init__.py` (`__version__`). Currently `0.5.0`.
 
 ## Voice skill integration
 

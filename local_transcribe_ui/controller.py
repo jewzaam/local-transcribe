@@ -47,6 +47,8 @@ class AppController:
         silence_threshold: float,
         silence_duration: float,
         min_chunk_seconds: float,
+        vad_filter: bool = True,
+        condition_on_previous_text: bool = True,
     ):
         self._model_size = model_size
         self._device_id = device_id
@@ -57,6 +59,8 @@ class AppController:
         self._silence_threshold = silence_threshold
         self._silence_duration = silence_duration
         self._min_chunk_seconds = min_chunk_seconds
+        self._vad_filter = vad_filter
+        self._condition_on_previous_text = condition_on_previous_text
 
         self._root: tk.Tk | None = None
         self._controller: RecordingController | None = None
@@ -94,6 +98,8 @@ class AppController:
             silence_threshold=self._silence_threshold,
             silence_duration=self._silence_duration,
             min_chunk_seconds=self._min_chunk_seconds,
+            vad_filter=self._vad_filter,
+            condition_on_previous_text=self._condition_on_previous_text,
         )
 
         self._controller.start()

@@ -116,8 +116,11 @@ class TestRecordingControllerStart:
         controller = RecordingController(mock_tk_root)
         controller.start()
 
-        # No kwargs passed — engine classes use their own defaults
-        mock_dependencies["chunk_manager_cls"].assert_called_once_with()
+        # Only vad_filter and condition_on_previous_text are always passed
+        mock_dependencies["chunk_manager_cls"].assert_called_once_with(
+            vad_filter=True,
+            condition_on_previous_text=True,
+        )
 
     def test_start_passes_custom_compute_params(self, mock_tk_root, mock_dependencies):
         controller = RecordingController(
@@ -130,6 +133,8 @@ class TestRecordingControllerStart:
         mock_dependencies["chunk_manager_cls"].assert_called_once_with(
             device="cuda",
             compute_type="float16",
+            vad_filter=True,
+            condition_on_previous_text=True,
         )
 
 

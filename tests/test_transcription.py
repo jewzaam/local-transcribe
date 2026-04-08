@@ -95,6 +95,40 @@ class TestRunTranscription:
         assert result == "hello world"
         mock_whisper_model.transcribe.assert_called_once()
 
+    def test_transcribe_wav_passes_vad_filter(self, tmp_path, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_wav
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_wav(path, model_size="tiny", vad_filter=True)
+
+        call_kwargs = mock_whisper_model.transcribe.call_args[1]
+        assert call_kwargs["vad_filter"] is True
+
+    def test_transcribe_wav_passes_condition_on_previous_text(
+        self, tmp_path, mock_whisper_model
+    ):
+        from local_transcribe.transcription import transcribe_wav
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_wav(path, model_size="tiny", condition_on_previous_text=False)
+
+        call_kwargs = mock_whisper_model.transcribe.call_args[1]
+        assert call_kwargs["condition_on_previous_text"] is False
+
     def test_transcribe_wav_progress_callback(self, tmp_path, mock_whisper_model):
         from local_transcribe.transcription import transcribe_wav
 
@@ -130,6 +164,21 @@ class TestRunTranscription:
         call_args = mock_whisper_model.transcribe.call_args
         source = call_args[0][0]
         assert source.dtype == np.float32
+
+    def test_transcribe_audio_defaults_vad_on(self, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_audio
+
+        audio = np.zeros(SAMPLE_RATE, dtype=np.int16)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_audio(audio, model_size="tiny")
+
+        call_kwargs = mock_whisper_model.transcribe.call_args[1]
+        assert call_kwargs["vad_filter"] is True
+        assert call_kwargs["condition_on_previous_text"] is True
 
     def test_transcribe_audio_progress_callback(self, mock_whisper_model):
         from local_transcribe.transcription import transcribe_audio
