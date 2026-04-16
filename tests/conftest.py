@@ -34,18 +34,21 @@ def mock_recording_session():
         yield session
 
 
+class FakeSegment:
+    """Mimics a faster-whisper Segment for test mocking."""
+
+    def __init__(self, text, start, end):
+        self.text = text
+        self.start = start
+        self.end = end
+
+
 @pytest.fixture
 def mock_whisper_model():
     """A mock WhisperModel that returns predictable segments."""
-
-    class FakeSegment:
-        def __init__(self, text, end):
-            self.text = text
-            self.end = end
-
     model = MagicMock()
     model.transcribe.return_value = (
-        iter([FakeSegment("hello world", 1.0)]),
+        iter([FakeSegment("hello world", 0.0, 1.0)]),
         None,
     )
     return model

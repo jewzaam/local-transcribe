@@ -129,6 +129,16 @@ def _parse_bool(value: str) -> bool:
     raise argparse.ArgumentTypeError(f"expected true/false, got '{value}'")
 
 
+def _add_output_format_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--output-format",
+        type=str,
+        default="plain",
+        choices=["plain", "json"],
+        help="output format: plain text or timestamped JSON (default: plain)",
+    )
+
+
 def _add_gpu_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--compute-device",
@@ -180,6 +190,7 @@ def _cmd_record(args: argparse.Namespace) -> None:
         min_chunk_seconds=args.min_chunk_seconds,
         vad_filter=args.vad_filter,
         condition_on_previous_text=args.condition_on_previous_text,
+        output_format=args.output_format,
     )
     app.run()
 
@@ -194,7 +205,11 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
     import wave
 
     t0 = time.monotonic()
-    from local_transcribe import start_whisper_preload, transcribe_wav
+    from local_transcribe import (
+        start_whisper_preload,
+        transcribe_wav,
+        transcribe_wav_segments,
+    )
 
     logger.debug("startup: imports in %.2fs", time.monotonic() - t0)
     from local_transcribe_ui.protocol import emit_begin, emit_end
@@ -209,15 +224,27 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         device=args.compute_device,
         compute_type=args.compute_type,
     )
+
+    use_json = args.output_format == "json"
     t_start = time.time()
-    transcript = transcribe_wav(
-        wav_path,
-        model_size=args.model,
-        device=args.compute_device,
-        compute_type=args.compute_type,
-        vad_filter=args.vad_filter,
-        condition_on_previous_text=args.condition_on_previous_text,
-    )
+    if use_json:
+        segments = transcribe_wav_segments(
+            wav_path,
+            model_size=args.model,
+            device=args.compute_device,
+            compute_type=args.compute_type,
+            vad_filter=args.vad_filter,
+            condition_on_previous_text=args.condition_on_previous_text,
+        )
+    else:
+        transcript = transcribe_wav(
+            wav_path,
+            model_size=args.model,
+            device=args.compute_device,
+            compute_type=args.compute_type,
+            vad_filter=args.vad_filter,
+            condition_on_previous_text=args.condition_on_previous_text,
+        )
     t_elapsed = time.time() - t_start
 
     try:
@@ -235,7 +262,10 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         args.compute_type,
     )
     emit_begin()
-    print(transcript)
+    if use_json:
+        print(json.dumps(segments, ensure_ascii=False, indent=2))
+    else:
+        print(transcript)
     emit_end()
 
 
@@ -314,6 +344,7 @@ def main() -> None:
         metavar="SECONDS",
         help="minimum audio before silence flush triggers (default: 10.0)",
     )
+    _add_output_format_arg(record_parser)
     _add_whisper_args(record_parser)
     _add_config_arg(record_parser)
     _add_logging_args(record_parser)
@@ -331,6 +362,7 @@ def main() -> None:
         choices=["tiny", "base", "small", "medium", "large"],
         help="Whisper model size (default: small)",
     )
+    _add_output_format_arg(transcribe_parser)
     _add_gpu_args(transcribe_parser)
     _add_whisper_args(transcribe_parser)
     _add_config_arg(transcribe_parser)

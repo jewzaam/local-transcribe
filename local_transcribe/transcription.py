@@ -248,8 +248,11 @@ def _run_transcription(
     vad_filter: bool = False,
     condition_on_previous_text: bool = True,
     progress_callback: Callable[[float], None] | None = None,
-) -> str:
+) -> list[dict]:
     """Run transcription with stdout suppression and progress tracking.
+
+    Always returns structured segment data. Callers decide how to
+    present it (join text, return dicts, etc.).
 
     Args:
         model: WhisperModel instance.
@@ -261,6 +264,10 @@ def _run_transcription(
         condition_on_previous_text: Use previous segment output as prompt for
             the next. Disabling prevents hallucination cascades.
         progress_callback: Called with progress fraction (0.0-1.0).
+
+    Returns:
+        List of {"start": float, "end": float, "text": str} dicts.
+        Empty segments (whitespace-only after sanitization) are filtered out.
     """
     logger.debug(
         "transcribing: duration=%.1fs, beam_size=%d, vad_filter=%s, "
@@ -278,23 +285,29 @@ def _run_transcription(
             vad_filter=vad_filter,
             condition_on_previous_text=condition_on_previous_text,
         )
-        text_parts = []
+        result: list[dict] = []
         for seg in segments:
-            text_parts.append(seg.text.strip())
+            text = _sanitize_transcript(seg.text.strip())
+            if text:
+                result.append({"start": seg.start, "end": seg.end, "text": text})
             if progress_callback and audio_duration > 0:
                 fraction = min(seg.end / audio_duration, 1.0)
                 progress_callback(fraction)
     elapsed = time.monotonic() - t0
     if progress_callback:
         progress_callback(1.0)
-    result = _sanitize_transcript(" ".join(text_parts).strip())
     logger.debug(
-        "transcription complete: %.2fs elapsed, %.1fx realtime, %d chars",
+        "transcription complete: %.2fs elapsed, %.1fx realtime, %d segments",
         elapsed,
         audio_duration / elapsed if elapsed > 0 else 0,
         len(result),
     )
     return result
+
+
+def _segments_to_text(segments: list[dict]) -> str:
+    """Join segment dicts into a single text string."""
+    return " ".join(seg["text"] for seg in segments)
 
 
 def transcribe_wav(
@@ -309,6 +322,67 @@ def transcribe_wav(
     progress_callback: Callable[[float], None] | None = None,
 ) -> str:
     """Transcribe a WAV file using faster-whisper.
+
+    Args:
+        wav_path: Path to the WAV file.
+        model_size: Whisper model size (tiny, base, small, medium, large).
+        device: Inference device — "cpu", "cuda", or "auto".
+        compute_type: Model precision — "int8", "float16", "float32".
+        beam_size: Beam search width. Lower = faster, higher = more accurate.
+        vad_filter: Enable Silero VAD to filter non-speech audio.
+        condition_on_previous_text: Use previous segment as prompt for next.
+        progress_callback: Called with progress fraction (0.0-1.0) after each
+            segment, based on segment end time / audio duration.
+    """
+    logger.info("Transcribing with model '%s'...", model_size)
+
+    audio_duration = 0.0
+    try:
+        with wave.open(wav_path, "rb") as wf:
+            audio_duration = wf.getnframes() / wf.getframerate()
+    except Exception:
+        logger.warning("Could not read WAV duration from %s", wav_path)
+
+    try:
+        model = get_or_create_model(
+            model_size=model_size, device=device, compute_type=compute_type
+        )
+        seg_list = _run_transcription(
+            model,
+            wav_path,
+            audio_duration=audio_duration,
+            beam_size=beam_size,
+            vad_filter=vad_filter,
+            condition_on_previous_text=condition_on_previous_text,
+            progress_callback=progress_callback,
+        )
+        return _segments_to_text(seg_list)
+    except Exception as e:
+        logger.error(
+            "Failed to load Whisper model '%s': %s\n"
+            "Ensure faster-whisper is installed and you have internet "
+            "connectivity for initial model download.",
+            model_size,
+            e,
+        )
+        raise
+
+
+def transcribe_wav_segments(
+    wav_path: str,
+    *,
+    model_size: str = _DEFAULT_MODEL_SIZE,
+    device: str = _DEFAULT_DEVICE,
+    compute_type: str = _DEFAULT_COMPUTE_TYPE,
+    beam_size: int = _DEFAULT_BEAM_SIZE,
+    vad_filter: bool = False,
+    condition_on_previous_text: bool = True,
+    progress_callback: Callable[[float], None] | None = None,
+) -> list[dict]:
+    """Transcribe a WAV file and return timestamped segments.
+
+    Same interface as transcribe_wav but returns a list of
+    {"start": float, "end": float, "text": str} dicts.
 
     Args:
         wav_path: Path to the WAV file.
@@ -369,6 +443,57 @@ def transcribe_audio(
 
     Passes the audio directly to the model as a float32 array, avoiding
     temp WAV file I/O. Used by ChunkManager for individual chunks.
+
+    Args:
+        audio_data: int16 numpy array of audio samples.
+        model_size: Whisper model size (tiny, base, small, medium, large).
+        device: Inference device — "cpu", "cuda", or "auto".
+        compute_type: Model precision — "int8", "float16", "float32".
+        beam_size: Beam search width. Lower = faster, higher = more accurate.
+        vad_filter: Enable Silero VAD to filter non-speech audio.
+        condition_on_previous_text: Use previous segment as prompt for next.
+        progress_callback: Called with progress fraction (0.0-1.0).
+    """
+    logger.info("Transcribing with model '%s'...", model_size)
+    audio_duration = len(audio_data) / SAMPLE_RATE
+
+    # Convert int16 to float32 normalized [-1.0, 1.0] for faster-whisper
+    audio_float = audio_data.flatten().astype(np.float32) / 32768.0
+
+    try:
+        model = get_or_create_model(
+            model_size=model_size, device=device, compute_type=compute_type
+        )
+        seg_list = _run_transcription(
+            model,
+            audio_float,
+            audio_duration=audio_duration,
+            beam_size=beam_size,
+            vad_filter=vad_filter,
+            condition_on_previous_text=condition_on_previous_text,
+            progress_callback=progress_callback,
+        )
+        return _segments_to_text(seg_list)
+    except Exception as e:
+        logger.error("Transcription failed: %s", e)
+        raise
+
+
+def transcribe_audio_segments(
+    audio_data: np.ndarray,
+    *,
+    model_size: str = _DEFAULT_MODEL_SIZE,
+    device: str = _DEFAULT_DEVICE,
+    compute_type: str = _DEFAULT_COMPUTE_TYPE,
+    beam_size: int = _DEFAULT_BEAM_SIZE,
+    vad_filter: bool = True,
+    condition_on_previous_text: bool = True,
+    progress_callback: Callable[[float], None] | None = None,
+) -> list[dict]:
+    """Transcribe raw audio data and return timestamped segments.
+
+    Same interface as transcribe_audio but returns a list of
+    {"start": float, "end": float, "text": str} dicts.
 
     Args:
         audio_data: int16 numpy array of audio samples.

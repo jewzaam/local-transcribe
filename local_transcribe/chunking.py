@@ -19,8 +19,9 @@ from local_transcribe.transcription import (
     _DEFAULT_COMPUTE_TYPE,
     _DEFAULT_DEVICE,
     _DEFAULT_MODEL_SIZE,
+    _segments_to_text,
     compute_audio_level,
-    transcribe_audio,
+    transcribe_audio_segments,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,8 +186,9 @@ class ChunkManager:
         self._condition_on_previous_text = condition_on_previous_text
         self._chunks_ref: list[np.ndarray] | None = None
         self._boundary: int = 0
-        self._queue: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._queue: queue.Queue[tuple[np.ndarray, int] | None] = queue.Queue()
         self._transcripts: list[str] = []
+        self._all_segments: list[dict] = []
         self._errors: list[Exception] = []
         self._fatal_error: RuntimeError | None = None
         self._stream_callback: Callable[[str], None] | None = None
@@ -233,8 +235,9 @@ class ChunkManager:
 
         audio = np.concatenate(self._chunks_ref[self._boundary : end], axis=0)
         self._boundary = end
+        sample_offset = self._total_samples_sent
         self._total_samples_sent += len(audio)
-        self._queue.put(audio)
+        self._queue.put((audio, sample_offset))
         return True
 
     def finish(self, timeout: float = 30.0) -> None:
@@ -254,6 +257,10 @@ class ChunkManager:
     def get_transcript(self) -> str:
         """Join all completed transcripts."""
         return " ".join(t for t in self._transcripts if t).strip()
+
+    def get_segments(self) -> list[dict]:
+        """Return all completed segments with recording-relative timestamps."""
+        return list(self._all_segments)
 
     def total_samples_recorded(self) -> int:
         """Total samples in the bound chunks list (including un-flushed)."""
@@ -297,11 +304,12 @@ class ChunkManager:
                 item = self._queue.get()
                 if item is None:
                     break
+                audio, sample_offset = item
                 chunk_num += 1
-                original_samples = len(item)
+                original_samples = len(audio)
 
                 # Trim silence from both ends
-                trimmed = trim_silence(item, sample_rate=self._sample_rate)
+                trimmed = trim_silence(audio, sample_rate=self._sample_rate)
                 if trimmed is None:
                     logger.info(
                         "chunk %d: skipped, all silence (%d samples)",
@@ -323,7 +331,7 @@ class ChunkManager:
                     # Capture loop-local values for the closure. Both are
                     # int copies, so the closure is safe even though it is
                     # defined inside the loop.
-                    chunk_samples = len(item)
+                    chunk_samples = len(audio)
                     samples_before = self._total_samples_done
 
                     def on_segment_progress(fraction: float) -> None:
@@ -331,7 +339,7 @@ class ChunkManager:
                             fraction * chunk_samples
                         )
 
-                    text = transcribe_audio(
+                    segments = transcribe_audio_segments(
                         trimmed,
                         model_size=self._model_size,
                         device=self._device,
@@ -343,6 +351,15 @@ class ChunkManager:
                     )
                     # Ensure we account for the full chunk
                     self._total_samples_done = samples_before + chunk_samples
+
+                    # Offset segment timestamps to recording-relative
+                    time_offset = sample_offset / self._sample_rate
+                    for seg in segments:
+                        seg["start"] += time_offset
+                        seg["end"] += time_offset
+                    self._all_segments.extend(segments)
+
+                    text = _segments_to_text(segments)
                     if text:
                         self._transcripts.append(text)
                         if self._stream_callback:
@@ -360,7 +377,7 @@ class ChunkManager:
                 except Exception as e:
                     logger.error("Chunk transcription failed: %s", e)
                     self._errors.append(e)
-                    self._total_samples_done += len(item)
+                    self._total_samples_done += len(audio)
         except RuntimeError as e:
             logger.error("Fatal transcription error: %s", e)
             self._fatal_error = e

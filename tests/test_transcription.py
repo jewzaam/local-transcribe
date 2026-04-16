@@ -199,8 +199,116 @@ class TestRunTranscription:
         assert progress_values[-1] == 1.0
 
 
+class TestRunTranscriptionSegments:
+    """Unit tests for transcribe_wav_segments with mocked model."""
+
+    def test_returns_segment_dicts(self, tmp_path, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_wav_segments
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            result = transcribe_wav_segments(path, model_size="tiny")
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0] == {"start": 0.0, "end": 1.0, "text": "hello world"}
+
+    def test_skips_empty_segments(self, tmp_path):
+        from local_transcribe.transcription import transcribe_wav_segments
+
+        from tests.conftest import FakeSegment
+
+        model = MagicMock()
+        model.transcribe.return_value = (
+            iter(
+                [
+                    FakeSegment("hello", 0.0, 1.0),
+                    FakeSegment("   ", 1.0, 2.0),
+                    FakeSegment("world", 2.0, 3.0),
+                ]
+            ),
+            None,
+        )
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=model,
+        ):
+            result = transcribe_wav_segments(path, model_size="tiny")
+
+        assert len(result) == 2
+        assert result[0]["text"] == "hello"
+        assert result[1]["text"] == "world"
+
+    def test_passes_vad_filter(self, tmp_path, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_wav_segments
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_wav_segments(path, model_size="tiny", vad_filter=True)
+
+        call_kwargs = mock_whisper_model.transcribe.call_args[1]
+        assert call_kwargs["vad_filter"] is True
+
+    def test_passes_condition_on_previous_text(self, tmp_path, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_wav_segments
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_wav_segments(
+                path, model_size="tiny", condition_on_previous_text=False
+            )
+
+        call_kwargs = mock_whisper_model.transcribe.call_args[1]
+        assert call_kwargs["condition_on_previous_text"] is False
+
+    def test_progress_callback(self, tmp_path, mock_whisper_model):
+        from local_transcribe.transcription import transcribe_wav_segments
+
+        audio = np.zeros(SAMPLE_RATE * 2, dtype=np.int16)
+        path = str(tmp_path / "test.wav")
+        save_wav_to(audio, path)
+
+        progress_values = []
+        with patch(
+            "local_transcribe.transcription.get_or_create_model",
+            return_value=mock_whisper_model,
+        ):
+            transcribe_wav_segments(
+                path,
+                model_size="tiny",
+                progress_callback=lambda f: progress_values.append(f),
+            )
+
+        assert progress_values[-1] == 1.0
+
+
 class TestGetOrCreateModel:
     def test_caches_model_on_same_size(self):
+        import threading
+
         from local_transcribe.transcription import get_or_create_model
 
         mock_cls = MagicMock()
@@ -211,8 +319,9 @@ class TestGetOrCreateModel:
             patch(
                 "local_transcribe.transcription._get_model_class", return_value=mock_cls
             ),
-            patch("local_transcribe.transcription._cached_model", None),  # noqa: E501
+            patch("local_transcribe.transcription._cached_model", None),
             patch("local_transcribe.transcription._cached_model_key", None),
+            patch("local_transcribe.transcription._model_lock", threading.Lock()),
         ):
             result1 = get_or_create_model(model_size="tiny")
             result2 = get_or_create_model(model_size="tiny")
@@ -221,6 +330,8 @@ class TestGetOrCreateModel:
             assert mock_cls.call_count == 1  # created once, cached on second call
 
     def test_replaces_model_on_different_size(self):
+        import threading
+
         from local_transcribe.transcription import get_or_create_model
 
         mock_cls = MagicMock()
@@ -232,8 +343,9 @@ class TestGetOrCreateModel:
             patch(
                 "local_transcribe.transcription._get_model_class", return_value=mock_cls
             ),
-            patch("local_transcribe.transcription._cached_model", None),  # noqa: E501
+            patch("local_transcribe.transcription._cached_model", None),
             patch("local_transcribe.transcription._cached_model_key", None),
+            patch("local_transcribe.transcription._model_lock", threading.Lock()),
         ):
             result1 = get_or_create_model(model_size="tiny")
             result2 = get_or_create_model(model_size="base")
