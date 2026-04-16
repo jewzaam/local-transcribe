@@ -7,6 +7,7 @@ GUI-only — CLI operations (transcribe, devices) are handled by __main__.py.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import tkinter as tk
@@ -49,6 +50,7 @@ class AppController:
         min_chunk_seconds: float,
         vad_filter: bool = True,
         condition_on_previous_text: bool = True,
+        output_format: str = "plain",
     ):
         self._model_size = model_size
         self._device_id = device_id
@@ -61,6 +63,7 @@ class AppController:
         self._min_chunk_seconds = min_chunk_seconds
         self._vad_filter = vad_filter
         self._condition_on_previous_text = condition_on_previous_text
+        self._output_format = output_format
 
         self._root: tk.Tk | None = None
         self._controller: RecordingController | None = None
@@ -107,15 +110,23 @@ class AppController:
 
     def _on_done(self, transcript: str) -> None:
         """Handle completed transcript — emit to stdout and quit."""
+        use_json = self._output_format == "json"
+
         if not transcript:
             emit_begin()
+            if use_json:
+                print("[]")
             emit_end()
             logger.warning("No speech detected in audio.")
         elif self._stream_mode:
             emit_end()
         else:
             emit_begin()
-            print(transcript)
+            if use_json and self._controller:
+                segments = self._controller.get_segments()
+                print(json.dumps(segments, ensure_ascii=False, indent=2))
+            else:
+                print(transcript)
             emit_end()
 
         self._shutdown()

@@ -52,9 +52,9 @@ Launches tkinter window, records audio, transcribes in chunks. Output wrapped in
 
 ### `transcribe` — WAV file transcription (no GUI)
 ```bash
-local-transcribe transcribe <file.wav> [--model small] [--vad-filter true|false] [--condition-on-previous-text true|false] [--debug --log-file <path>]
+local-transcribe transcribe <file.wav> [--model small] [--output-format plain|json] [--vad-filter true|false] [--condition-on-previous-text true|false] [--debug --log-file <path>]
 ```
-Output wrapped in `[BEGIN]`/`[END]` markers on stdout.
+Output wrapped in `[BEGIN]`/`[END]` markers on stdout. With `--output-format json`, outputs timestamped segments as a JSON array instead of plain text.
 
 ### `devices` — list audio input devices
 
@@ -72,7 +72,7 @@ Defaults are already CPU-safe (`compute_device: "cpu"`, `compute_type: "int8"`).
 
 ## Version
 
-Single source of truth: `local_transcribe/__init__.py` (`__version__`). Currently `0.5.0`.
+Single source of truth: `local_transcribe/__init__.py` (`__version__`). Currently `0.6.0`.
 
 ## Voice skill integration
 

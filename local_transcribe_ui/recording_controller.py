@@ -206,6 +206,12 @@ class RecordingController:
         if self._on_error:
             self._on_error(error)
 
+    def get_segments(self) -> list[dict]:
+        """Return all segments with recording-relative timestamps."""
+        if self._chunk_manager is None:
+            return []
+        return self._chunk_manager.get_segments()
+
     @property
     def is_active(self) -> bool:
         """Whether a recording session is currently active."""

@@ -162,9 +162,10 @@ class TestChunkManager:
         assert flushed is True
         assert mgr.boundary == 3
 
-        # Verify enqueued audio shape
-        item = mgr._queue.get_nowait()
-        assert len(item) == 300
+        # Verify enqueued audio shape (queue items are (audio, offset) tuples)
+        audio, offset = mgr._queue.get_nowait()
+        assert len(audio) == 300
+        assert offset == 0
 
     def test_flush_nothing_returns_false(self):
         mgr = ChunkManager()
@@ -215,7 +216,10 @@ class TestChunkManagerWorker:
         chunks = [np.full(SAMPLE_RATE, 10000, dtype=np.int16)]
         mgr.bind_chunks(chunks)
 
-        with patch("local_transcribe.chunking.transcribe_audio", return_value="hello"):
+        with patch(
+            "local_transcribe.chunking.transcribe_audio_segments",
+            return_value=[{"start": 0.0, "end": 1.0, "text": "hello"}],
+        ):
             mgr.start_worker()
             mgr.flush()
             mgr.finish(timeout=5.0)
@@ -229,7 +233,9 @@ class TestChunkManagerWorker:
         chunks = [np.zeros(SAMPLE_RATE, dtype=np.int16)]
         mgr.bind_chunks(chunks)
 
-        with patch("local_transcribe.chunking.transcribe_audio") as mock_transcribe:
+        with patch(
+            "local_transcribe.chunking.transcribe_audio_segments"
+        ) as mock_transcribe:
             mgr.start_worker()
             mgr.flush()
             mgr.finish(timeout=5.0)
@@ -246,7 +252,8 @@ class TestChunkManagerWorker:
         mgr.set_stream_callback(lambda t: streamed.append(t))
 
         with patch(
-            "local_transcribe.chunking.transcribe_audio", return_value="streamed text"
+            "local_transcribe.chunking.transcribe_audio_segments",
+            return_value=[{"start": 0.0, "end": 1.0, "text": "streamed text"}],
         ):
             mgr.start_worker()
             mgr.flush()
@@ -260,7 +267,7 @@ class TestChunkManagerWorker:
         mgr.bind_chunks(chunks)
 
         with patch(
-            "local_transcribe.chunking.transcribe_audio",
+            "local_transcribe.chunking.transcribe_audio_segments",
             side_effect=RuntimeError("model failed"),
         ):
             mgr.start_worker()
@@ -278,7 +285,7 @@ class TestChunkManagerWorker:
         mgr.bind_chunks(chunks)
 
         with patch(
-            "local_transcribe.chunking.transcribe_audio",
+            "local_transcribe.chunking.transcribe_audio_segments",
             side_effect=ValueError("bad audio"),
         ):
             mgr.start_worker()
@@ -299,8 +306,11 @@ class TestChunkManagerWorker:
         mgr.bind_chunks(chunks)
 
         with patch(
-            "local_transcribe.chunking.transcribe_audio",
-            side_effect=["first chunk", "second chunk"],
+            "local_transcribe.chunking.transcribe_audio_segments",
+            side_effect=[
+                [{"start": 0.0, "end": 1.0, "text": "first chunk"}],
+                [{"start": 0.0, "end": 1.0, "text": "second chunk"}],
+            ],
         ):
             mgr.start_worker()
             mgr.flush(boundary=1)
