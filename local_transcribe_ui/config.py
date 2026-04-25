@@ -92,10 +92,14 @@ def setup_logging(
         handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
+    # Configure root once. force=True replaces any handlers from a prior call so
+    # repeated invocations don't accumulate duplicates. Root stays at WARNING to
+    # silence third-party loggers (faster_whisper, ctranslate2); project loggers
+    # are raised to the user-selected level below.
+    logging.basicConfig(level=logging.WARNING, handlers=[handler], force=True)
+
     for name in LOG_MODULES:
-        mod_logger = logging.getLogger(name)
-        mod_logger.addHandler(handler)
-        mod_logger.setLevel(log_level)
+        logging.getLogger(name).setLevel(log_level)
 
     # Route uncaught exceptions through the logging system
     root_logger = logging.getLogger(LOG_MODULES[0])

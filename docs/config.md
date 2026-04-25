@@ -97,7 +97,7 @@ runtime libraries:
 pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 
 # pipx install
-make pipx-cuda
+make install-pipx-cuda
 ```
 
 The DLL paths are registered automatically on Windows — no PATH changes

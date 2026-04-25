@@ -1,7 +1,7 @@
 # local-transcribe
 
-[![Test](https://github.com/jewzaam/local-transcribe/actions/workflows/test.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/test.yml) [![Coverage](https://github.com/jewzaam/local-transcribe/actions/workflows/coverage.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/coverage.yml) [![Lint](https://github.com/jewzaam/local-transcribe/actions/workflows/lint.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/lint.yml) [![Format](https://github.com/jewzaam/local-transcribe/actions/workflows/format.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/format.yml) [![Type Check](https://github.com/jewzaam/local-transcribe/actions/workflows/typecheck.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/typecheck.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![test](https://github.com/jewzaam/local-transcribe/actions/workflows/test.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/test.yml) [![quality](https://github.com/jewzaam/local-transcribe/actions/workflows/quality.yml/badge.svg)](https://github.com/jewzaam/local-transcribe/actions/workflows/quality.yml)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Local speech-to-text using faster-whisper. Record from a microphone with a tkinter GUI, transcribe WAV files from the command line, or use the engine as a library in your own application.
 
@@ -33,8 +33,8 @@ make install-dev
 ### Global (pipx)
 
 ```bash
-make pipx            # install CLI globally
-make pipx-cuda       # inject NVIDIA CUDA libs for GPU acceleration
+make install-pipx       # install CLI globally
+make install-pipx-cuda  # inject NVIDIA CUDA libs for GPU acceleration
 ```
 
 ### From Git
@@ -89,7 +89,7 @@ controller.start()
 ```bash
 make help        # show all targets
 make check       # format, lint, typecheck, test, coverage
-make test        # pytest (unit tests only)
+make test-unit   # pytest (unit tests only)
 make run         # launch the recording GUI
 ```
 

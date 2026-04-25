@@ -170,6 +170,7 @@ def start_whisper_preload(
         target=_preload_whisper,
         args=(model_size, device, compute_type),
         daemon=True,
+        name="whisper-preload",
     ).start()
 
 

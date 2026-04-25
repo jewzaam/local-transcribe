@@ -38,6 +38,7 @@ class TestAppControllerCancel:
 
         app_controller._on_cancel()  # should not raise
 
+    @pytest.mark.requires_subprocess
     def test_cancel_emits_cancel_marker(self, app_controller, tmp_path):
         """AppController emits [CANCEL] via os.write for CLI consumers."""
         import subprocess
