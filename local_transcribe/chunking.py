@@ -212,7 +212,9 @@ class ChunkManager:
 
     def start_worker(self) -> None:
         """Start the background transcription thread."""
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker = threading.Thread(
+            target=self._worker_loop, daemon=True, name="transcription-worker"
+        )
         self._worker.start()
 
     def flush(self, boundary: int | None = None) -> bool:

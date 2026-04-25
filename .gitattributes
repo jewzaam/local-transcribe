@@ -1,0 +1,9 @@
+# Enforce LF line endings for shell scripts and text files that run on Linux
+# (CI runners, act). Without this, Windows checkouts can introduce CRLF and
+# break bash interpretation (e.g., `set -o pipefail\r` becomes invalid).
+*.sh        text eol=lf
+*.bash      text eol=lf
+Makefile    text eol=lf
+*.mk        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf

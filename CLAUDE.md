@@ -10,10 +10,10 @@ Chunked local speech-to-text using faster-whisper. Two packages in one repo:
 ```bash
 make install-dev   # editable install with dev deps into .venv
 make check         # format + lint + typecheck + test + coverage (default target)
-make pipx          # install globally via pipx (no venv needed)
+make install-pipx  # install globally via pipx (no venv needed)
 ```
 
-Individual targets: `make format`, `make lint`, `make typecheck`, `make test`, `make coverage`.
+Individual targets: `make test-format` (read-only check), `make format` (rewrites source), `make test-lint`, `make test-typecheck`, `make test-unit`, `make test-coverage`, `make test-complexity`.
 
 Integration tests (require model download) are excluded by default. Run with: `python -m pytest -m integration`.
 
@@ -68,11 +68,11 @@ When capturing transcript output via stdout redirect, use `--log-file` to avoid 
 
 ## CPU-only systems
 
-Defaults are already CPU-safe (`compute_device: "cpu"`, `compute_type: "int8"`). No CUDA libraries needed. The `make pipx-cuda` target exists for systems with CUDA but is not required.
+Defaults are already CPU-safe (`compute_device: "cpu"`, `compute_type: "int8"`). No CUDA libraries needed. The `make install-pipx-cuda` target exists for systems with CUDA but is not required.
 
 ## Version
 
-Single source of truth: `local_transcribe/__init__.py` (`__version__`). Currently `0.6.0`.
+Version is declared in both `local_transcribe/__init__.py` (`__version__`) and `pyproject.toml`; they must match. `make version-check` enforces this. Currently `0.6.1`.
 
 ## Voice skill integration
 

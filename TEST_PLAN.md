@@ -70,10 +70,10 @@ All bug fixes to existing functionality **must** follow TDD:
 ## Running Tests
 
 ```bash
-make test                # unit tests (default, excludes integration)
-make coverage            # unit tests with coverage report
+make test-unit           # unit tests (default, excludes integration)
+make test-coverage       # unit tests with coverage report
 pytest -m integration    # integration tests (requires model download)
-make check               # full pipeline: format, lint, typecheck, test, coverage
+make check               # full pipeline: test-format, test-lint, test-typecheck, test-unit, test-coverage
 ```
 
 ## Test Data

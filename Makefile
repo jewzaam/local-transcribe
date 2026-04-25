@@ -3,11 +3,17 @@
 -include make/pipx.mk
 -include make/version-check.mk
 
-.PHONY: check help install install-dev install-no-deps uninstall clean format format-check lint typecheck test test-verbose coverage complexity mutation mutation-report run
+.PHONY: check help install install-dev install-no-deps uninstall clean \
+	format test-format test-lint test-typecheck test-unit test-unit-verbose \
+	test-coverage test-complexity test-mutation mutation-report run
 
 PACKAGE_NAME ?= local_transcribe local_transcribe_ui
 VERSION_FILE ?= local_transcribe/__init__.py
 VERSION_DIRS ?= local_transcribe/ local_transcribe_ui/
+
+# System Python used to bootstrap the venv. CI overrides with `make install-dev PY_SYS=python`
+# to bind the venv to the matrix interpreter that actions/setup-python placed on PATH.
+PY_SYS ?= python3
 
 ifeq ($(OS),Windows_NT)
     VENV_DIR ?= .venv
@@ -19,7 +25,7 @@ endif
 
 $(info venv: $(VENV_DIR))
 
-check: format lint typecheck test coverage  ## Run format, lint, typecheck, test, coverage (default)
+check: test-format test-lint test-typecheck test-unit test-coverage  ## Run format-check, lint, typecheck, test, coverage (default — all read-only)
 
 .DEFAULT_GOAL := check
 
@@ -27,7 +33,7 @@ help:  ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 $(PYTHON):
-	python3 -m venv $(VENV_DIR)
+	$(PY_SYS) -m venv $(VENV_DIR)
 
 install: $(PYTHON)  ## Install package
 	$(PYTHON) -m pip install .
@@ -46,31 +52,31 @@ clean:  ## Remove build artifacts and caches
 	find . -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
-format: install-dev  ## Format code with black
+format: install-dev  ## Format code with black (mutates source)
 	$(PYTHON) -m black $(PACKAGE_NAME) tests
 
-format-check: install-dev  ## Check formatting without modifying files
+test-format: install-dev  ## Check formatting without modifying files
 	$(PYTHON) -m black --check $(PACKAGE_NAME) tests
 
-lint: install-dev  ## Lint with flake8
+test-lint: install-dev  ## Lint with flake8
 	$(PYTHON) -m flake8 --max-line-length=88 --extend-ignore=E203,W503 $(PACKAGE_NAME) tests
 
-typecheck: install-dev  ## Type check with mypy
+test-typecheck: install-dev  ## Type check with mypy
 	$(PYTHON) -m mypy $(PACKAGE_NAME)
 
-test: install-dev  ## Run pytest
+test-unit: install-dev  ## Run pytest
 	$(PYTHON) -m pytest
 
-test-verbose: install-dev  ## Run pytest with verbose output
+test-unit-verbose: install-dev  ## Run pytest with verbose output
 	$(PYTHON) -m pytest -v
 
-coverage: install-dev  ## Run pytest with coverage (50% threshold — GUI code is untestable without display)
+test-coverage: install-dev  ## Run pytest with coverage (50% threshold — GUI code is untestable without display)
 	$(PYTHON) -m pytest --cov=local_transcribe --cov=local_transcribe_ui --cov-report=term --cov-fail-under=50
 
-complexity: install-dev  ## Check cyclomatic complexity (max 10 per function)
-	$(PYTHON) -m radon cc $(PACKAGE_NAME) -n C -s
+test-complexity: install-dev  ## Check cyclomatic complexity (xenon — fails on grade > B)
+	$(PYTHON) -m xenon $(PACKAGE_NAME) --max-absolute B --max-modules B --max-average A
 
-mutation: install-dev  ## Run mutation testing (not part of check — run on-demand)
+test-mutation: install-dev  ## Run mutation testing (not part of check — run on-demand)
 	$(PYTHON) -m mutmut run --CI --paths-to-mutate "local_transcribe"
 
 mutation-report: $(PYTHON)  ## Show results of last mutation run
