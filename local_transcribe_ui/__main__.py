@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import time
+from typing import NoReturn
 
 from local_transcribe_ui import __version__
 from local_transcribe_ui.config import setup_logging
@@ -283,8 +284,21 @@ def _cmd_devices(args: argparse.Namespace) -> None:
         print(f"  {dev['id']}: {dev['name']}")
 
 
+class _Parser(argparse.ArgumentParser):
+    """ArgumentParser that points at the `devices` subcommand on --device errors.
+
+    argparse prints only usage plus the error message on failure, never the
+    help text, so the hint has to be appended to the message itself.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        if "argument --device" in message:
+            message += "\nRun 'local-transcribe devices' to list input device IDs."
+        super().error(message)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="local-transcribe",
         description="Voice-to-text with local Whisper",
     )
@@ -308,7 +322,7 @@ def main() -> None:
         "--device",
         type=int,
         default=None,
-        help="Audio input device ID",
+        help="Audio input device ID (see: local-transcribe devices)",
     )
     record_parser.add_argument(
         "--wav-output",

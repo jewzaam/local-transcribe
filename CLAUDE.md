@@ -72,7 +72,9 @@ Defaults are already CPU-safe (`compute_device: "cpu"`, `compute_type: "int8"`).
 
 ## Version
 
-Version is declared in both `local_transcribe/__init__.py` (`__version__`) and `pyproject.toml`; they must match. `make version-check` enforces this. Currently `0.6.1`.
+Version is declared in three places — `pyproject.toml` and `__version__` in *both* `local_transcribe/__init__.py` and `local_transcribe_ui/__init__.py`. They must match; `make version-check` enforces it against every path in `VERSION_FILE`. `local_transcribe_ui.__version__` is the one users see: `--version` and the `[BEGIN version=X.Y.Z]` protocol marker both read it.
+
+Bump with `make version-bump-major`, `version-bump-minor`, or `version-bump-patch` — never by hand, since a hand edit is how the three drift apart. Bumping is deliberate: CI only requires it on PRs that touch `VERSION_DIRS`. Currently `0.6.1`.
 
 ## Voice skill integration
 
