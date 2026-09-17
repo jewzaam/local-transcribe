@@ -20,13 +20,18 @@ if ! echo "$toml_ver" | grep -Pq "$SEMVER_RE"; then
     exit 1
 fi
 
-if [ -n "$VERSION_FILE" ] && [ -f "$VERSION_FILE" ]; then
-    code_ver=$(grep -m1 '__version__' "$VERSION_FILE" | sed 's/.*"\(.*\)".*/\1/')
+# VERSION_FILE may name several files (word-split intentionally). Each package
+# that declares __version__ must be listed, or it drifts from pyproject.toml
+# unchecked — and __version__ is what `--version` and the [BEGIN] marker print.
+# shellcheck disable=SC2086
+for version_file in $VERSION_FILE; do
+    [ -f "$version_file" ] || continue
+    code_ver=$(grep -m1 '__version__' "$version_file" | sed 's/.*"\(.*\)".*/\1/')
     if [ "$toml_ver" != "$code_ver" ]; then
-        echo "version-check: FAIL — pyproject.toml has '$toml_ver' but $VERSION_FILE has '$code_ver'" >&2
+        echo "version-check: FAIL — pyproject.toml has '$toml_ver' but $version_file has '$code_ver'" >&2
         exit 1
     fi
-fi
+done
 
 # Find mainline branch
 mainline=""

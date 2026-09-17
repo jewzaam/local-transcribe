@@ -32,6 +32,16 @@ def _sd():
     return sd
 
 
+def _av():
+    """Lazy import of PyAV (used only when the device rejects SAMPLE_RATE)."""
+    import av
+
+    return av
+
+
+_EMPTY_BLOCK = np.empty((0, AUDIO_CHANNELS), dtype=AUDIO_DTYPE)
+
+
 class RecordingError(Exception):
     """Raised when audio recording fails."""
 
@@ -99,6 +109,8 @@ class RecordingSession:
         self._silence_flush_boundary: int | None = None
 
         self._stream: Any = None
+        self._capture_rate = SAMPLE_RATE
+        self._resampler: Any = None
 
         if chunk_manager is not None:
             chunk_manager.bind_chunks(self._chunks)
@@ -144,15 +156,47 @@ class RecordingSession:
             total -= now - self._pause_start
         return max(0.0, total)
 
+    def _pick_capture_rate(self) -> int:
+        """Return SAMPLE_RATE if the device accepts it, else its default rate.
+
+        Many microphones only expose their native rate (typically 44100 or
+        48000) and reject 16000 outright, which surfaces as PortAudio
+        "Invalid sample rate [PaErrorCode -9997]".
+        """
+        sd = _sd()
+        try:
+            sd.check_input_settings(
+                device=self._device_id,
+                channels=AUDIO_CHANNELS,
+                dtype=AUDIO_DTYPE,
+                samplerate=SAMPLE_RATE,
+            )
+            return SAMPLE_RATE
+        except Exception:
+            rate = int(sd.query_devices(self._device_id)["default_samplerate"])
+            logger.info(
+                "device %d rejected %d Hz; capturing at %d Hz and resampling",
+                self._device_id,
+                SAMPLE_RATE,
+                rate,
+            )
+            return rate
+
     def start(self) -> None:
         """Open the audio stream and begin recording.
 
         Raises:
             RecordingError: If the microphone cannot be accessed.
         """
+        self._capture_rate = self._pick_capture_rate()
+        if self._capture_rate != SAMPLE_RATE:
+            self._resampler = _av().audio.resampler.AudioResampler(
+                format="s16", layout="mono", rate=SAMPLE_RATE
+            )
+
         try:
             self._stream = _sd().InputStream(
-                samplerate=SAMPLE_RATE,
+                samplerate=self._capture_rate,
                 channels=AUDIO_CHANNELS,
                 dtype=AUDIO_DTYPE,
                 callback=self._audio_callback,
@@ -203,6 +247,11 @@ class RecordingSession:
             self._stream.close()
             self._stream = None
 
+        if self._resampler is not None:
+            tail = self._resample(None)
+            if len(tail):
+                self._chunks.append(tail)
+
         if not self._chunks:
             raise RecordingError("No audio captured.")
 
@@ -225,8 +274,12 @@ class RecordingSession:
         if status:
             logger.warning("audio_callback status: %s", status)
         if self._recording and not self._paused:
-            self._chunks.append(indata.copy())
+            block = indata.copy() if self._resampler is None else self._resample(indata)
             peak = int(np.max(np.abs(indata)))
+            if not len(block):
+                self._current_level = compute_audio_level(peak)
+                return
+            self._chunks.append(block)
             self._current_level = compute_audio_level(peak)
             if self._callback_count % 50 == 0:
                 logger.debug(
@@ -240,7 +293,7 @@ class RecordingSession:
             if self._silence_detector is not None and self._chunk_manager is not None:
                 accumulated_s = (
                     (len(self._chunks) - self._chunk_manager.boundary)
-                    * len(indata)
+                    * len(block)
                     / SAMPLE_RATE
                 )
                 boundary = self._silence_detector.feed(
@@ -250,3 +303,19 @@ class RecordingSession:
                     self._silence_flush_boundary = boundary
         else:
             self._current_level = 0.0
+
+    def _resample(self, indata) -> np.ndarray:
+        """Resample one capture-rate block to SAMPLE_RATE.
+
+        Pass None to flush the resampler's buffered tail. Returns an
+        (N, AUDIO_CHANNELS) int16 array, possibly empty — libswresample
+        buffers, so a single input block need not yield output.
+        """
+        frame = None
+        if indata is not None:
+            frame = _av().AudioFrame.from_ndarray(
+                np.ascontiguousarray(indata.T), format="s16", layout="mono"
+            )
+            frame.sample_rate = self._capture_rate
+        out = [f.to_ndarray().T for f in self._resampler.resample(frame)]
+        return np.concatenate(out, axis=0) if out else _EMPTY_BLOCK

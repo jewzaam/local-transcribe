@@ -2,13 +2,16 @@
 
 -include make/pipx.mk
 -include make/version-check.mk
+-include make/version-bump.mk
 
 .PHONY: check help install install-dev install-no-deps uninstall clean \
 	format test-format test-lint test-typecheck test-unit test-unit-verbose \
 	test-coverage test-complexity test-mutation mutation-report run
 
 PACKAGE_NAME ?= local_transcribe local_transcribe_ui
-VERSION_FILE ?= local_transcribe/__init__.py
+# Space-separated; every file listed is checked by version-check and
+# rewritten by version-bump-*, so the packages cannot drift apart.
+VERSION_FILE ?= local_transcribe/__init__.py local_transcribe_ui/__init__.py
 VERSION_DIRS ?= local_transcribe/ local_transcribe_ui/
 
 # System Python used to bootstrap the venv. CI overrides with `make install-dev PY_SYS=python`
